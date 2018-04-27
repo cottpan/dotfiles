@@ -12,4 +12,7 @@ fi
 
 # Customize to your needs...
 export LANG=en_US.UTF-8
+setopt histignorealldups
+chpwd() { ls -ltr --color=auto }
 
+eval `dircolors ~/.dircolors -b`

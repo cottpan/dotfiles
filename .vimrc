@@ -79,6 +79,7 @@ let g:airline#extensions#whitespace#enabled = 1
 "--------------------
 "" vim settings
 "--------------------
+let g:solarized_termcolors=256
 "" Theme
 syntax enable
 set background=dark
