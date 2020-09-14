@@ -20,7 +20,8 @@ bindkey "^P" history-beginning-search-backward-end
 bindkey "^N" history-beginning-search-forward-end
 
 # alias
-alias diff="colordiff"alias ls='exa'
+alias diff="colordiff"
+alias ls='exa'
 alias ll='exa -ahl --git'
 alias cat='bat'
 
