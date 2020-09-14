@@ -1,6 +1,6 @@
 source ~/.zplug/init.zsh
 
-chpwd() { ls -ltr }
+chpwd() { ls -lr }
 
 # syntax
 zplug "chrissicool/zsh-256color"
@@ -28,10 +28,6 @@ zplug sindresorhus/pure, use:pure.zsh, from:github, as:theme
 #    rename-to:fzf, \
 #    use:"*darwin*amd64*"
 
-# dircolors使わない場合
-#alias ls="ls -G"
-#alias la="ls -alG"
-#alias ll="ls -lh"
 
 # fh - repeat history
 fh() {
@@ -102,3 +98,7 @@ fi
 
 # コマンドをリンクして、PATH に追加し、プラグインは読み込む
 zplug load --verbose
+
+[[ -d ~/.rbenv  ]] && \
+  export PATH=${HOME}/.rbenv/bin:${PATH} && \
+  eval "$(rbenv init -)"export PATH="/usr/local/sbin:$PATH"

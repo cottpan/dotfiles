@@ -20,4 +20,9 @@ bindkey "^P" history-beginning-search-backward-end
 bindkey "^N" history-beginning-search-forward-end
 
 # alias
-alias diff="colordiff"
+alias diff="colordiff"alias ls='exa'
+alias ll='exa -ahl --git'
+alias cat='bat'
+
+export PATH="$HOME/.cargo/bin:$PATH"
+export PATH=$HOME/.nodebrew/current/bin:$PATH
