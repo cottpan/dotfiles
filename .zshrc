@@ -102,3 +102,11 @@ zplug load --verbose
 [[ -d ~/.rbenv  ]] && \
   export PATH=${HOME}/.rbenv/bin:${PATH} && \
   eval "$(rbenv init -)"export PATH="/usr/local/sbin:$PATH"
+
+# pyenvさんに~/.pyenvではなく、/usr/loca/var/pyenvを使うようにお願いする
+export PYENV_ROOT=/usr/local/var/pyenv
+
+# pyenvさんに自動補完機能を提供してもらう
+if command -v pyenv 1>/dev/null 2>&1; then
+  eval "$(pyenv init -)"
+fi
