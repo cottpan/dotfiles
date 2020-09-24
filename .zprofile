@@ -23,7 +23,8 @@ bindkey "^N" history-beginning-search-forward-end
 alias diff="colordiff"
 alias ls='exa'
 alias ll='exa -ahl --git'
-alias cat='bat'
+# If you set the alias of `cat` to `bat`, the function to display the branch name will not work.
+# alias cat='bat'
 
 export PATH="$HOME/.cargo/bin:$PATH"
 export PATH=$HOME/.nodebrew/current/bin:$PATH
