@@ -111,3 +111,10 @@ export PYENV_ROOT=/usr/local/var/pyenv
 if command -v pyenv 1>/dev/null 2>&1; then
   eval "$(pyenv init -)"
 fi
+
+PROTECT_BRANCHES='master|development|release'
+
+git-delete-merged-branch() {
+    git fetch --prune
+    git branch --merged | egrep -v "\*|${PROTECT_BRANCHES}" | xargs git branch -d
+}
