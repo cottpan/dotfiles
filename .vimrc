@@ -21,7 +21,8 @@ call dein#add('w0rp/ale')
 call dein#add('vim-airline/vim-airline')
 call dein#add('vim-airline/vim-airline-themes')
 call dein#add('justmao945/vim-clang')
-
+" solarized
+call dein#add ('altercation/vim-colors-solarized')
 
 
 " You can specify revision/branch/tag.
