@@ -112,7 +112,7 @@ zplug load --verbose
 #   eval "$(pyenv init -)"
 # fi
 
-PROTECT_BRANCHES='master|development|release'
+PROTECT_BRANCHES='master|develop|release'
 
 git-delete-merged-branch() {
     git fetch --prune
