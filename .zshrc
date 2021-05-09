@@ -1,5 +1,9 @@
-source ~/.zplug/init.zsh
+# source ~/.zplug/init.zsh
+export ZPLUG_HOME=/opt/homebrew/opt/zplug
+source $ZPLUG_HOME/init.zsh
 
+export MINT_PATH="$HOME/.mint"
+export MINT_LINK_PATH="$MINT_PATH/bin"
 chpwd() { ls -lr }
 
 # syntax

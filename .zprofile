@@ -28,3 +28,4 @@ alias ll='exa -ahl --git'
 alias gip='curl ifconfig.io/all'
 
 export PATH="$HOME/.cargo/bin:$PATH"
+eval "$(/opt/homebrew/bin/brew shellenv)"
