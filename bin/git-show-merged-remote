@@ -1,0 +1,7 @@
+#!/bin/bash
+if [[ -z $1 ]]; then
+    echo "branch name required." 1>&2
+    exit 1
+fi
+
+git branch -v -r --merged origin/"$1" | grep -v -e "$1" | awk -F ' ' '{print$2}' | xargs -I{} git show -s {} --oneline
