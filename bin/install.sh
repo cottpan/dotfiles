@@ -1,14 +1,7 @@
-#!/bin/bash
+# install homebrew
+if ! command -v brew > /dev/null 2>&1; then
+  # Install homebrew in Intel Mac or M1 Mac on Rosetta2
+  echo "Installing homebrew..."
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
 
-DOTPATH=~/dotfiles
-
-for f in .??*
-do
-    [[ "$f" == ".git" ]] && continue
-    [[ "$f" == ".github" ]] && continue
-    [[ "$f" == ".gitignore" ]] && continue
-    [[ "$f" == ".DS_Store" ]] && continue
-
-    echo "$f"
-    ln -snfv "$DOTPATH/$f" "$HOME"/"$f"
-done

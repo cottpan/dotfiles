@@ -116,20 +116,8 @@ zplug load --verbose
 #   eval "$(pyenv init -)"
 # fi
 
-PROTECT_BRANCHES='master|develop|release'
-
-git-delete-merged-branch() {
-    git fetch --prune
-    git branch --merged | egrep -v "\*|${PROTECT_BRANCHES}" | xargs git branch -d
-}
-
-# argsないときのエラーハンドリングいれたい
-git-show-merged-remote() {
-  git branch -v -r --merged origin/"$1" | grep -v -e "$1" | awk -F ' ' '{print$2}' | xargs -I{} git show -s {} --oneline
-}
-
-git-commited-lines() {
-  git log --numstat --pretty="%H" --author="$1" --no-merges | awk 'NF==3 {plus+=$1; minus+=$2} END {printf("%d (+%d, -%d)\n", plus+minus, plus, minus)}'
-}
-
 eval "$(anyenv init -)"
+export PATH="/opt/homebrew/opt/openjdk@11/bin:$PATH"
+export CPPFLAGS="-I/opt/homebrew/opt/openjdk@11/include"
+export PATH="$HOME/.mint/bin:$PATH"
+eval "$(pyenv init -)"
