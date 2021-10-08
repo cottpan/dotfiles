@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Install required packages
-        run: apt-get update && apt-get install -y git sudo
+        run: apt-get update && apt-get install -y git sudo make
 
       - name: Install dotfiles
         run: make install
