@@ -35,9 +35,11 @@
 !/.vim/after/**
 !/.vim/init.vim
 !/.vim/coc-settings.json
-!/.bin/
-!/.bin/**
-!/.bin.local
+!/bin/
+!/bin/**
+!/bin.local
+!/etc/
+!/etc/**
 !/.tmux.conf
 !/.tmux/
 !/.tmux/conf/
@@ -66,4 +68,5 @@
 !/LICENSE
 !.gitignore
 !.gitkeep
-!/Brewfile
+!/.Brewfile
+!/Makefile
