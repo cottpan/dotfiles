@@ -1,6 +1,11 @@
-# source ~/.zplug/init.zsh
-export ZPLUG_HOME=/opt/homebrew/opt/zplug
-source $ZPLUG_HOME/init.zsh
+
+if [ `uname -m` = "arm64" ]; then
+  export ZPLUG_HOME=/opt/homebrew/opt/zplug
+  source $ZPLUG_HOME/init.zsh
+else
+  export ZPLUG_HOME=/usr/local/opt/zplug
+  source $ZPLUG_HOME/init.zsh
+fi
 
 export MINT_PATH="$HOME/.mint"
 export MINT_LINK_PATH="$MINT_PATH/bin"
