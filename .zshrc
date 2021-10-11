@@ -126,3 +126,5 @@ export PATH="/opt/homebrew/opt/openjdk@11/bin:$PATH"
 export CPPFLAGS="-I/opt/homebrew/opt/openjdk@11/include"
 export PATH="$HOME/.mint/bin:$PATH"
 eval "$(pyenv init -)"
+
+export PATH="$HOME/dotfiles/bin:$PATH"
