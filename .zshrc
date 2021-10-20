@@ -7,6 +7,7 @@ else
   source $ZPLUG_HOME/init.zsh
 fi
 
+
 export MINT_PATH="$HOME/.mint"
 export MINT_LINK_PATH="$MINT_PATH/bin"
 chpwd() { ls -lr }
@@ -122,7 +123,5 @@ zplug load --verbose
 # fi
 
 eval "$(anyenv init -)"
-export PATH="/opt/homebrew/opt/openjdk@11/bin:$PATH"
-export CPPFLAGS="-I/opt/homebrew/opt/openjdk@11/include"
-export PATH="$HOME/.mint/bin:$PATH"
 eval "$(pyenv init -)"
+export CPPFLAGS="-I/opt/homebrew/opt/openjdk@11/include"
