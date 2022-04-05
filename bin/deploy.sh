@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Fail on unset variables and command errors
-set -ue -o pipefail
+set -euo pipefail
 
 # Prevent commands misbehaving due to locale differences
 export LC_ALL=C

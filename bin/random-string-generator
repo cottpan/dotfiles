@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# != 1 ]; then
+    echo "length required." 1>&2
+    exit 1
+fi
+
+if [[ -z $1 ]]; then
+    echo "length required." 1>&2
+    exit 1
+fi
+
+cat /dev/urandom | base64 | fold -w "$1" | head -n 5

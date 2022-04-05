@@ -1,4 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# != 1 ]; then
+    echo 引数エラー: $*
+    exit 1
+fi
+
 if [[ -z $1 ]]; then
     echo "branch name required." 1>&2
     exit 1

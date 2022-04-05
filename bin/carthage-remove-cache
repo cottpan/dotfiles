@@ -1,5 +1,4 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
 set -euo pipefail
 
 rm -rf ~/Library/Caches/org.carthage.CarthageKit 

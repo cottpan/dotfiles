@@ -1,5 +1,5 @@
 # エラーがあったらそこで即終了、設定していない変数を使ったらエラーにする
-set -eu
+set -euo pipefail
 
 # is_arm という関数を用意しておく。毎回 uname -m を実行するのは莫迦らしいので、UNAME 環境変数で判断
 is_arm() { test "$UNAME" == "arm64"; }
