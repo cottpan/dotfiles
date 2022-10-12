@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OUTPUT_FILENAME='output.webp'
+
+if [[ -z $1 ]]; then
+    echo "input file required." 1>&2
+    exit 1
+fi
+
+if [[ -n $2 ]]; then
+    OUTPUT_FILENAME="$2"
+fi
+
+ffmpeg -i "$1" -vcodec libwebp -lossless 0 -qscale 75 -preset default -loop 0 -vf "fps=10,scale=640:-1" -an ${OUTPUT_FILENAME}
