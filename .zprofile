@@ -28,9 +28,11 @@ alias ll='exa -ahl --git'
 alias gip='curl ifconfig.io/all'
 
 export PATH="$HOME/.cargo/bin:$PATH"
-eval $(/usr/local/bin/brew shellenv)
+
 if [ `uname -m` = "arm64" ]; then
   eval $(/opt/homebrew/bin/brew shellenv)
+else
+  eval $(/usr/local/bin/brew shellenv)
 fi
 
 export PYENV_ROOT="$HOME/.anyenv/envs/pyenv"
