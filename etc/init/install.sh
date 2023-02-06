@@ -8,6 +8,7 @@ DOTPATH=$HOME/dotfiles
 if [[ "$(uname)" == "Darwin" ]]; then
 	echo "macOS detected. Calling macOS install scripts..."
     source ${DOTPATH}/etc/init/osx/install
+    source ${DOTPATH}/etc/init/osx/change_defaults.sh
 else 
 	echo "Not macOS!"
 	exit 1
