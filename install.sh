@@ -21,7 +21,11 @@ if [ "$UNAME-$(arch -arm64 uname -m)" == "x86_64-arm64" ]; then
 	exit 1
 fi
 
-xcode-select --install
+if ![ xcode-select -p > /dev/null 2>&1 ]; then
+  # Install homebrew in Intel Mac or M1 Mac on Rosetta2
+  echo "Installing Xcode CLT..."
+  xcode-select --install
+fi
 
 if [ ! -d ~/dotfiles ]; then
   cd ~
