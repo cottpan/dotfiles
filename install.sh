@@ -5,6 +5,9 @@ set -euo pipefail
 # dotfiles の場所を設定
 DOTPATH=$HOME/dotfiles
 
+# アーキテクチャ名は UNAME に入れておく
+UNAME=`uname -m`
+
 if [ "$(uname)" == "Darwin" ]; then
 	echo "macOS detected. "
 else 
