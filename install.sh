@@ -30,7 +30,7 @@ fi
 if [[ ! -d ~/dotfiles ]]; then
   cd ~
   echo "Cloning dotfiles..."
-  git clone https://github.com/cottpan/dotfiles.git
+  git clone https://github.com/cottpan/dotfiles.git --recursive
 else
   echo "dotfiles already cloned."
 fi
