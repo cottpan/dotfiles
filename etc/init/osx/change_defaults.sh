@@ -31,3 +31,9 @@ chflags nohidden ~/Library
 defaults write com.apple.screencapture disable-shadow -boolean true
 # スクリーンショットの保存先を変更
 defaults write com.apple.screencapture location ~/Pictures/Screenshots
+
+for app in "Dock" \
+	"Finder" \
+	"SystemUIServer"; do
+	killall "${app}" &> /dev/null
+done

@@ -13,3 +13,5 @@ else
 	echo "Not macOS!"
 	exit 1
 fi
+
+exec $SHELL -l
