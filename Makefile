@@ -16,7 +16,7 @@ install: ## Create symlink to home directory
 	@$(foreach val, $(DOTFILES), ln -sfnv $(abspath $(val)) $(HOME)/$(val);)
 
 deploy: ## Deploy
-	@$(DOTPATH)/install.sh
+	@$(DOTPATH)/etc/init/install.sh
 
 clean: ## Remove the dot files
 	@echo 'Remove dot files in your home directory...'
