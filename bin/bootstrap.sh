@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # エラーがあったらそこで即終了、設定していない変数を使ったらエラーにする
 set -euo pipefail
 
