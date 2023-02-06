@@ -15,7 +15,7 @@ UNAME=`uname -m`
 DOTPATH=$HOME/dotfiles
 
 # Rosetta2 でターミナルを動かしている時には強制終了させる
-if [ "$UNAME-$(arch -arm64 uname -m)" == "x86_64-arm64" ]; then
+if [[ "$UNAME-$(arch -arm64 uname -m)" == "x86_64-arm64" ]]; then
   echo "This script can not exec in Rosetta2 terminal"
   exit 1
 fi
@@ -24,7 +24,7 @@ fi
 # xcode-select --install
 
 # install homebrew
-if ![ command -v brew > /dev/null 2>&1 ]; then
+if ![[ command -v brew > /dev/null 2>&1 ]]; then
   # Install homebrew in Intel Mac or M1 Mac on Rosetta2
   echo "Installing homebrew..."
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
