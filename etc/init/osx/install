@@ -27,4 +27,4 @@ if !( command -v brew > /dev/null 2>&1 ); then
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
-which /opt/homebrew/bin/brew >/dev/null 2>&1 brew bundle --file ${DOTPATH}/.config/Brewfile --verbose
+/opt/homebrew/bin/brew bundle --file ${DOTPATH}/.config/Brewfile --verbose
