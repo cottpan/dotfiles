@@ -1,0 +1,6 @@
+[submodule ".config/osx-terminal.app-colors-solarized"]
+	path = .config/osx-terminal.app-colors-solarized
+	url = https://github.com/tomislav/osx-terminal.app-colors-solarized.git
+[submodule ".config/Solarized-Dark-for-Xcode"]
+	path = .config/Solarized-Dark-for-Xcode
+	url = https://github.com/ArtSabintsev/Solarized-Dark-for-Xcode.git

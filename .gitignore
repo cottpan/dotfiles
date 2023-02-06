@@ -70,3 +70,4 @@
 !.gitkeep
 !/.Brewfile
 !/Makefile
+!/install.sh
