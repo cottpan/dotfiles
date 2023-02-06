@@ -5,7 +5,7 @@ set -euo pipefail
 # dotfiles の場所を設定
 DOTPATH=$HOME/dotfiles
 
-if [ "$(uname)" == "Darwin" ]; then
+if [[ "$(uname)" == "Darwin" ]]; then
 	echo "macOS detected. Calling macOS install scripts..."
     source ${DOTPATH}/etc/init/osx/install
 else 
