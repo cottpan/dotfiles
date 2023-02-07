@@ -39,7 +39,7 @@ if ! is_macos ; then
 fi
 
 # Rosetta2 でターミナルを動かしている時には強制終了させる
-if ! is_rosseta2 ; then
+if is_rosseta2 ; then
 	echo "This script can not exec in Rosetta2 terminal. Abort."
 	exit 1
 fi
