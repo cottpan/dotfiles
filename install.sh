@@ -11,10 +11,6 @@ DOTFILES_GITHUB="https://github.com/cottpan/dotfiles.git"; export DOTFILES_GITHU
 # アーキテクチャ名は UNAME に入れておく
 UNAME=`uname -m`
 
-is_ci() {
-	test -z $CI
-}
-
 is_macos() {
 	test "$(uname)" == "Darwin"
 }
@@ -42,7 +38,7 @@ is_clt_installed() {
     xcode-select -p > /dev/null 2>&1
 }
 
-if is_ci ; then
+if ! [ -z $CI ] ; then
 	DOTPATH=$RUNNER_WORKSPACE/dotfiles
 fi
 
