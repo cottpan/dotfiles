@@ -7,9 +7,6 @@ else
   source $ZPLUG_HOME/init.zsh
 fi
 
-
-export MINT_PATH="$HOME/.mint"
-export MINT_LINK_PATH="$MINT_PATH/bin"
 chpwd() { ls -lr }
 
 # syntax
@@ -22,22 +19,8 @@ zplug "ascii-soup/zsh-url-highlighter"
 # tools
 zplug "marzocchi/zsh-notify"
 
-# prezto のプラグインやテーマを使用する
-#zplug "modules/osx", from:prezto, if:"[[ $OSTYPE == *darwin* ]]"
-#zplug "modules/prompt", from:prezto
-# zstyle は zplug load の前に設定する
-#zstyle ':prezto:module:prompt' theme 'sorin'
-
-
 zplug mafredri/zsh-async, from:github
 zplug sindresorhus/pure, use:pure.zsh, from:github, as:theme
-
-#zplug "junegunn/fzf-bin", \
-#    from:gh-r, \
-#    as:command, \
-#    rename-to:fzf, \
-#    use:"*darwin*amd64*"
-
 
 # fh - repeat history
 fh() {
@@ -84,8 +67,6 @@ fd() {
   cd "$dir"
 }
 
-
-
 if [ -n "$LS_COLORS" ]; then
     zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
 fi
@@ -110,4 +91,3 @@ fi
 zplug load
 
 eval "$(anyenv init -)"
-export CPPFLAGS="-I/opt/homebrew/opt/openjdk@11/include"

@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
 # エラーがあったらそこで即終了、設定していない変数を使ったらエラーにする
 set -euo pipefail
-
 # Prevent commands misbehaving due to locale differences
 export LC_ALL=C
-
-# is_arm という関数を用意しておく。毎回 uname -m を実行するのは莫迦らしいので、UNAME 環境変数で判断
-is_arm() { test "$UNAME" == "arm64"; }
 
 # アーキテクチャ名は UNAME に入れておく
 UNAME=`uname -m`
@@ -14,21 +10,35 @@ UNAME=`uname -m`
 # dotfiles の場所を設定
 DOTPATH=$HOME/dotfiles
 
+# is_arm という関数を用意しておく。毎回 uname -m を実行するのは莫迦らしいので、UNAME 環境変数で判断
+is_arm() { 
+    test "$UNAME" == "arm64"
+}
+
+is_rosseta2() {
+	test "$UNAME-$(arch -arm64 uname -m)" == "x86_64-arm64"
+}
+
 # Rosetta2 でターミナルを動かしている時には強制終了させる
-if [[ "$UNAME-$(arch -arm64 uname -m)" == "x86_64-arm64" ]]; then
-    echo "This script can not exec in Rosetta2 terminal"
-    exit 1
+if is_rosseta2 ; then
+	echo "This script can not exec in Rosetta2 terminal. Abort."
+	exit 1
 fi
 
 # install homebrew
 if !( command -v brew > /dev/null 2>&1 ); then
-    # Install homebrew in Intel Mac or M1 Mac on Rosetta2
     echo "Installing homebrew..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
-/opt/homebrew/bin/brew bundle --file ${DOTPATH}/.config/Brewfile --verbose
+cp ${DOTPATH}/Brewfile.test $HOME/.Brewfile
+/opt/homebrew/bin/brew bundle --global --verbose
 
-if !( command -v anyenv > /dev/null 2>&1 ); then
-    anyenv install --init
-fi
+mkdir -p $HOME/.config/git
+touch $HOME/.config/git/ignore
+echo ".DS_Store" > $HOME/.config/git/ignore
+
+# sourceを実行する前にanyenv呼ぶとエラーになる
+# if !( command -v anyenv > /dev/null 2>&1 ); then
+#     anyenv install --init
+# fi
