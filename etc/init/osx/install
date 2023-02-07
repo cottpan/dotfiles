@@ -31,8 +31,14 @@ if !( command -v brew > /dev/null 2>&1 ); then
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
+if is_arm ; then
+    HOMEBREW_BIN_PATH="/opt/homebrew/bin"
+else
+    HOMEBREW_BIN_PATH="/usr/local/bin"
+fi
+
 cp ${DOTPATH}/Brewfile.test $HOME/.Brewfile
-/opt/homebrew/bin/brew bundle --global --verbose
+${HOMEBREW_BIN_PATH}/brew bundle --global --verbose
 
 mkdir -p $HOME/.config/git
 touch $HOME/.config/git/ignore
