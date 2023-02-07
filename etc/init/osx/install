@@ -10,6 +10,10 @@ UNAME=`uname -m`
 # dotfiles の場所を設定
 DOTPATH=$HOME/dotfiles
 
+is_ci() {
+	test "$CI" == "true"
+}
+
 # is_arm という関数を用意しておく。毎回 uname -m を実行するのは莫迦らしいので、UNAME 環境変数で判断
 is_arm() { 
     test "$UNAME" == "arm64"
@@ -19,10 +23,16 @@ is_rosseta2() {
 	test "$UNAME-$(arch -arm64 uname -m)" == "x86_64-arm64"
 }
 
+if is_ci ; then
+	DOTPATH=$RUNNER_WORKSPACE/dotfiles
+fi
+
 # Rosetta2 でターミナルを動かしている時には強制終了させる
-if is_rosseta2 ; then
-	echo "This script can not exec in Rosetta2 terminal. Abort."
-	exit 1
+if ! is_arm ; then
+	if is_rosseta2 ; then
+		echo "This script can not exec in Rosetta2 terminal. Abort."
+		exit 1
+	fi
 fi
 
 # install homebrew
@@ -31,8 +41,14 @@ if !( command -v brew > /dev/null 2>&1 ); then
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
+if is_arm ; then
+    HOMEBREW_BIN_PATH="/opt/homebrew/bin"
+else
+    HOMEBREW_BIN_PATH="/usr/local/bin"
+fi
+
 cp ${DOTPATH}/Brewfile.test $HOME/.Brewfile
-/opt/homebrew/bin/brew bundle --global --verbose
+${HOMEBREW_BIN_PATH}/brew bundle --global --verbose
 
 mkdir -p $HOME/.config/git
 touch $HOME/.config/git/ignore

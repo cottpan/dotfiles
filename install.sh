@@ -11,8 +11,16 @@ DOTFILES_GITHUB="https://github.com/cottpan/dotfiles.git"; export DOTFILES_GITHU
 # アーキテクチャ名は UNAME に入れておく
 UNAME=`uname -m`
 
+is_ci() {
+	test "$CI" == "true"
+}
+
 is_macos() {
 	test "$(uname)" == "Darwin"
+}
+
+is_arm() { 
+    test "$UNAME" == "arm64"
 }
 
 is_rosseta2() {
@@ -22,16 +30,21 @@ is_rosseta2() {
 dotfiles_download() {
     if [ -d "$DOTPATH" ]; then
         echo "error: $DOTPATH: already exists"
-        exit 1
+	elif [ "${CI}" = "true" ]; then
+		echo "Working on CI"
+	else
+		echo "Downloading dotfiles..."
+    	git clone --recursive "$DOTFILES_GITHUB" "$DOTPATH"
     fi
-    echo "Downloading dotfiles..."
-
-    git clone --recursive "$DOTFILES_GITHUB" "$DOTPATH"
 }
 
 is_clt_installed() {
     xcode-select -p > /dev/null 2>&1
 }
+
+if is_ci ; then
+	DOTPATH=$RUNNER_WORKSPACE/dotfiles
+fi
 
 if ! is_macos ; then
 	echo "not macOS! Abort."
@@ -39,9 +52,14 @@ if ! is_macos ; then
 fi
 
 # Rosetta2 でターミナルを動かしている時には強制終了させる
-if is_rosseta2 ; then
-	echo "This script can not exec in Rosetta2 terminal. Abort."
-	exit 1
+if ! is_arm ; then
+	echo "x86 Processor Detected"
+	if is_rosseta2 ; then
+		echo "This script can not exec in Rosetta2 terminal. Abort."
+		exit 1
+	fi
+else
+	echo "ARM Processor Detected."
 fi
 
 if !( xcode-select -p > /dev/null 2>&1 ); then
