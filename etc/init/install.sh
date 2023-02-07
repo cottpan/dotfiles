@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # エラーがあったらそこで即終了、設定していない変数を使ったらエラーにする
-set -euo pipefail
+set -eo pipefail
 # Prevent commands misbehaving due to locale differences
 export LC_ALL=C
 
@@ -8,7 +8,7 @@ export LC_ALL=C
 DOTPATH=$HOME/dotfiles
 
 is_ci() {
-	test "$CI" == "true"
+	test -z $CI
 }
 
 is_macos() {

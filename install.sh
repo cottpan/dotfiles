@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# エラーがあったらそこで即終了、設定していない変数を使ったらエラーにする
-set -euo pipefail
+# エラーがあったらそこで即終了
+set -eo pipefail
 # Prevent commands misbehaving due to locale differences
 export LC_ALL=C
 
@@ -12,7 +12,7 @@ DOTFILES_GITHUB="https://github.com/cottpan/dotfiles.git"; export DOTFILES_GITHU
 UNAME=`uname -m`
 
 is_ci() {
-	test "$CI" == "true"
+	test -z $CI
 }
 
 is_macos() {
@@ -30,7 +30,7 @@ is_rosseta2() {
 dotfiles_download() {
     if [ -d "$DOTPATH" ]; then
         echo "error: $DOTPATH: already exists"
-	elif [ "${CI}" = "true" ]; then
+	elif is_ci ; then
 		echo "Working on CI"
 	else
 		echo "Downloading dotfiles..."
