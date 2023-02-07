@@ -13,6 +13,7 @@ UNAME=`uname -m`
 ls -al 
 pwd
 ls -al ~
+printenv
 
 is_macos() {
 	test "$(uname)" == "Darwin"
