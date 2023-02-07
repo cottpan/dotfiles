@@ -10,6 +10,9 @@ DOTFILES_GITHUB="https://github.com/cottpan/dotfiles.git"; export DOTFILES_GITHU
 
 # アーキテクチャ名は UNAME に入れておく
 UNAME=`uname -m`
+ls -al 
+pwd
+ls -al ~
 
 is_macos() {
 	test "$(uname)" == "Darwin"
