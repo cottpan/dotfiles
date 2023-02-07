@@ -10,7 +10,6 @@ DOTPATH=$HOME/dotfiles
 is_macos() {
 	test "$(uname)" == "Darwin"
 }
-
 if is_macos ; then
 	echo "macOS detected. Calling macOS install scripts..."
     source ${DOTPATH}/etc/init/osx/install
