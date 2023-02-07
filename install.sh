@@ -10,10 +10,10 @@ DOTFILES_GITHUB="https://github.com/cottpan/dotfiles.git"; export DOTFILES_GITHU
 
 # アーキテクチャ名は UNAME に入れておく
 UNAME=`uname -m`
-ls -al 
-pwd
-ls -al ~
-printenv
+
+is_ci() {
+	test "$CI" == "true"
+}
 
 is_macos() {
 	test "$(uname)" == "Darwin"
@@ -30,16 +30,21 @@ is_rosseta2() {
 dotfiles_download() {
     if [ -d "$DOTPATH" ]; then
         echo "error: $DOTPATH: already exists"
-        exit 1
+	elif [ "${CI}" = "true" ]; then
+		echo "Working on CI"
+	else
+		echo "Downloading dotfiles..."
+    	git clone --recursive "$DOTFILES_GITHUB" "$DOTPATH"
     fi
-    echo "Downloading dotfiles..."
-
-    git clone --recursive "$DOTFILES_GITHUB" "$DOTPATH"
 }
 
 is_clt_installed() {
     xcode-select -p > /dev/null 2>&1
 }
+
+if is_ci ; then
+	DOTPATH=$RUNNER_WORKSPACE/dotfiles
+fi
 
 if ! is_macos ; then
 	echo "not macOS! Abort."

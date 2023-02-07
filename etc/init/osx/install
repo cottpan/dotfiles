@@ -10,6 +10,10 @@ UNAME=`uname -m`
 # dotfiles の場所を設定
 DOTPATH=$HOME/dotfiles
 
+is_ci() {
+	test "$CI" == "true"
+}
+
 # is_arm という関数を用意しておく。毎回 uname -m を実行するのは莫迦らしいので、UNAME 環境変数で判断
 is_arm() { 
     test "$UNAME" == "arm64"
@@ -18,6 +22,10 @@ is_arm() {
 is_rosseta2() {
 	test "$UNAME-$(arch -arm64 uname -m)" == "x86_64-arm64"
 }
+
+if is_ci ; then
+	DOTPATH=$RUNNER_WORKSPACE/dotfiles
+fi
 
 # Rosetta2 でターミナルを動かしている時には強制終了させる
 if ! is_arm ; then
