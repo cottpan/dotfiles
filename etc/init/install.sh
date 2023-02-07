@@ -7,15 +7,11 @@ export LC_ALL=C
 # dotfiles の場所を設定
 DOTPATH=$HOME/dotfiles
 
-is_ci() {
-	test -z $CI
-}
-
 is_macos() {
 	test "$(uname)" == "Darwin"
 }
 
-if is_ci ; then
+if ! [ -z $CI ] ; then
 	DOTPATH=$RUNNER_WORKSPACE/dotfiles
 fi
 
