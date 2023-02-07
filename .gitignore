@@ -68,7 +68,6 @@
 !/LICENSE
 !.gitignore
 !.gitkeep
-!/.Brewfile
 !/Makefile
 !/install.sh
 !/Brewfile

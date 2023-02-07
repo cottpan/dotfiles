@@ -19,5 +19,3 @@ else
 	echo "Not macOS! Abort."
 	exit 1
 fi
-
-exec $SHELL -l
