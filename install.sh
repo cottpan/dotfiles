@@ -15,6 +15,10 @@ is_macos() {
 	test "$(uname)" == "Darwin"
 }
 
+is_arm() { 
+    test "$UNAME" == "arm64"
+}
+
 is_rosseta2() {
 	test "$UNAME-$(arch -arm64 uname -m)" == "x86_64-arm64"
 }
@@ -39,9 +43,11 @@ if ! is_macos ; then
 fi
 
 # Rosetta2 でターミナルを動かしている時には強制終了させる
-if is_rosseta2 ; then
-	echo "This script can not exec in Rosetta2 terminal. Abort."
-	exit 1
+if ! is_arm ; then
+	if is_rosseta2 ; then
+		echo "This script can not exec in Rosetta2 terminal. Abort."
+		exit 1
+	fi
 fi
 
 if !( xcode-select -p > /dev/null 2>&1 ); then
