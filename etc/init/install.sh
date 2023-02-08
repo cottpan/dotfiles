@@ -21,5 +21,12 @@ if is_macos ; then
     source ${DOTPATH}/etc/init/osx/change_defaults.sh
 else 
 	echo "Not macOS! Abort."
-	exit 1
+fi
+
+# Deinのインストールスクリプトが対話型のため、CIでは無効にする
+if [ -z $CI ] ; then
+	mkdir -p $HOME/.vim/backup
+	sh -c "$(curl -fsSL https://raw.githubusercontent.com/Shougo/dein-installer.vim/master/installer.sh)"
+	rm $HOME/.vimrc
+	mv $HOME/.vimrc.pre-dein-vim $HOME/.vimrc
 fi
