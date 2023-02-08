@@ -26,7 +26,7 @@ is_rosseta2() {
 dotfiles_download() {
     if [ -d "$DOTPATH" ]; then
         echo "error: $DOTPATH: already exists"
-	elif ! [ -z $CI ] ; then
+	elif [ -n "$CI" ] ; then
 		echo "Working on CI"
 	else
 		echo "Downloading dotfiles..."
@@ -38,7 +38,7 @@ is_clt_installed() {
     xcode-select -p > /dev/null 2>&1
 }
 
-if ! [ -z $CI ] ; then
+if [ -n "$CI" ] ; then
 	DOTPATH=$RUNNER_WORKSPACE/dotfiles
 fi
 

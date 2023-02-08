@@ -19,7 +19,7 @@ is_rosseta2() {
 	test "$UNAME-$(arch -arm64 uname -m)" == "x86_64-arm64"
 }
 
-if ! [ -z $CI ] ; then
+if [ -n "$CI" ] ; then
 	DOTPATH=$RUNNER_WORKSPACE/dotfiles
 fi
 
