@@ -1,3 +1,5 @@
+scriptencoding utf-8
+set encoding=utf-8
 "dein Scripts-----------------------------
 " vi互換の動作を無効にする
 if &compatible
@@ -133,7 +135,7 @@ autocmd QuickFixCmdPost *grep* cwindow
 
 " エスケープシーケンスの表示 tab eol
 set list
-set listchars=tab:▸\ ,eol:¬
+set listchars=tab:▸·,eol:¬
 
 " 全角スペースの表示
 function! ZenkakuSpace()
