@@ -11,7 +11,7 @@ is_macos() {
 	test "$(uname)" == "Darwin"
 }
 
-if ! [ -z $CI ] ; then
+if [ -n "$CI" ] ; then
 	DOTPATH=$RUNNER_WORKSPACE/dotfiles
 fi
 
@@ -24,7 +24,7 @@ else
 fi
 
 # Deinのインストールスクリプトが対話型のため、CIでは無効にする
-if [ -z $CI ] ; then
+if [ -z "$CI" ] ; then
 	mkdir -p $HOME/.vim/backup
 	sh -c "$(curl -fsSL https://raw.githubusercontent.com/Shougo/dein-installer.vim/master/installer.sh)"
 	rm $HOME/.vimrc
