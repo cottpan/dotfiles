@@ -26,7 +26,7 @@ is_rosseta2() {
 dotfiles_download() {
     if [ -d "$DOTPATH" ]; then
         echo "error: $DOTPATH: already exists"
-	elif is_ci ; then
+	elif ! [ -z $CI ] ; then
 		echo "Working on CI"
 	else
 		echo "Downloading dotfiles..."
