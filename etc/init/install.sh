@@ -8,25 +8,25 @@ export LC_ALL=C
 DOTPATH=$HOME/dotfiles
 
 is_macos() {
-	test "$(uname)" == "Darwin"
+    test "$(uname)" == "Darwin"
 }
 
 if [ -n "$CI" ] ; then
-	DOTPATH=$RUNNER_WORKSPACE/dotfiles
+    DOTPATH=$RUNNER_WORKSPACE/dotfiles
 fi
 
 if is_macos ; then
-	echo "macOS detected. Calling macOS install scripts..."
+    echo "macOS detected. Calling macOS install scripts..."
     source ${DOTPATH}/etc/init/osx/install
     source ${DOTPATH}/etc/init/osx/change_defaults.sh
 else 
-	echo "Not macOS! Abort."
+    echo "Not macOS! Abort."
 fi
 
 # Deinのインストールスクリプトが対話型のため、CIでは無効にする
 if [ -z "$CI" ] ; then
-	mkdir -p $HOME/.vim/backup
-	sh -c "$(curl -fsSL https://raw.githubusercontent.com/Shougo/dein-installer.vim/master/installer.sh)"
-	rm $HOME/.vimrc
-	mv $HOME/.vimrc.pre-dein-vim $HOME/.vimrc
+    mkdir -p $HOME/.vim/backup
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/Shougo/dein-installer.vim/master/installer.sh)"
+    rm $HOME/.vimrc
+    mv $HOME/.vimrc.pre-dein-vim $HOME/.vimrc
 fi
