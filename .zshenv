@@ -11,5 +11,6 @@ path=(
     $HOME/.cargo/bin(N-/)
     $PYENV_ROOT/bin(N-/)
     /opt/homebrew/opt/openjdk@11/bin(N-/)
+    $HOME/Library/Android/sdk/platform-tools(N-/)
     $path
 )
