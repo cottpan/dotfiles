@@ -68,3 +68,6 @@ dotfiles_download
 
 cd ${DOTPATH} && make install
 cd ${DOTPATH} && make deploy
+
+# TODO: x64向けanyenvのフォルダ作成
+# 再起動: exec $SHELL -l
