@@ -21,8 +21,6 @@ bindkey "^N" history-beginning-search-forward-end
 
 # alias
 alias diff="colordiff"
-alias ls='exa'
-alias ll='exa -ahl --git'
 # If you set the alias of `cat` to `bat`, the function to display the branch name will not work.
 # alias cat='bat'
 alias gip='curl ifconfig.io/all'
