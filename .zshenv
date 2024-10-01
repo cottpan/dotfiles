@@ -18,4 +18,6 @@ path=(
     $BUN_INSTALL/bin(N-/)
     $path
 )
-. "$HOME/.cargo/env"
+if [ -f "$HOME/.cargo/env" ]; then
+    . "$HOME/.cargo/env"
+fi
