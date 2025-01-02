@@ -24,9 +24,11 @@ else
 fi
 
 # Deinのインストールスクリプトが対話型のため、CIでは無効にする
+set +u
 if [ -z "$CI" ] ; then
     mkdir -p $HOME/.vim/backup
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/Shougo/dein-installer.vim/master/installer.sh)"
     rm $HOME/.vimrc
     mv $HOME/.vimrc.pre-dein-vim $HOME/.vimrc
 fi
+set -u
