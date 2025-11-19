@@ -207,22 +207,7 @@ fi
 # コマンドをリンクして、PATH に追加し、プラグインは読み込む
 zplug load
 
-if [ `uname -m` = "arm64" ]; then
-  export ANYENV_ROOT="$HOME/.anyenv"
-  path=(
-    $ANYENV_ROOT/bin(N-/)
-    $path
-  )
-  eval "$(anyenv init -)"
-else
-  export ANYENV_ROOT="$HOME/.anyenv_x64"
-  path=(
-    $ANYENV_ROOT/bin(N-/)
-    $path
-  )
-  eval "$(anyenv init -)"
-fi
-
+eval "$(mise activate zsh)"
 
 # bun completions
 [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
