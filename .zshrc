@@ -156,7 +156,7 @@ function start_bastion_session() {
                       "Name=instance-state-name,Values=running" \
             --query "Reservations[*].Instances[*].InstanceId" \
             --output text \
-            --profile "$profile"
+            --profile "$profile" | head -1
     )
     aws ssm start-session \
         --profile "$profile" \
