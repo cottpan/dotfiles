@@ -1,0 +1,10 @@
+# Delete (one or multiple) selected application(s)
+funbrew() {
+  local uninst=$(brew leaves | fzf -m)
+
+  if [[ $uninst ]]; then
+    for prog in $(echo $uninst);
+    do; brew uninstall $prog; done;
+  fi
+}
+

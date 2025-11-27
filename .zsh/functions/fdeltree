@@ -1,0 +1,96 @@
+# fdeltree - delete selected git worktree
+fdeltree() {
+  # Check if we're in a git repository
+  if ! git rev-parse --git-dir &> /dev/null; then
+    echo "❌ Not in a git repository"
+    return 1
+  fi
+
+  # Get worktree list
+  local worktrees selected_worktree worktree_path current_path is_main_worktree
+
+  # Get current working directory
+  current_path=$(pwd)
+  
+  # Format of `git worktree list`: path commit [branch]
+  worktrees=$(git worktree list)
+  
+  if [ -z "$worktrees" ]; then
+    echo "📭 No worktrees found"
+    return 0
+  fi
+
+  # Select worktree to delete
+  selected_worktree=$(echo "$worktrees" | fzf \
+    --prompt="worktrees to delete > " \
+    --header="⚠️  Select a worktree to DELETE (main worktree cannot be deleted)" \
+    --preview="echo '📦 Branch:' && git -C {1} branch --show-current && echo '' && echo '📝 Changed files:' && git -C {1} status --porcelain | head -10 && echo '' && echo '📚 Recent commits:' && git -C {1} log --oneline --decorate -5" \
+    --preview-window="right:50%" \
+    --reverse \
+    --border \
+    --ansi)
+
+  if [ $? -ne 0 ]; then
+    return 0
+  fi
+
+  if [ -n "$selected_worktree" ]; then
+    # Extract worktree path
+    worktree_path=${${(s: :)selected_worktree}[1]}
+    
+    # Check if it's the main worktree (usually contains .git directory, not .git file)
+    if [ -d "${worktree_path}/.git" ]; then
+      echo "❌ Cannot delete main worktree: $worktree_path"
+      return 1
+    fi
+
+    # Check if we're currently in the worktree that's about to be deleted
+    if [[ "$current_path" == "$worktree_path"* ]]; then
+      echo "⚠️  You are currently in the worktree that will be deleted."
+      echo "   Current path: $current_path"
+      echo "   Worktree path: $worktree_path"
+      echo ""
+      echo "Please navigate to a different directory first, then run this command again."
+      return 1
+    fi
+
+    # Show worktree details
+    echo "🗂️  Worktree to delete:"
+    echo "   Path: $worktree_path"
+    echo "   Branch: $(git -C "$worktree_path" branch --show-current 2>/dev/null || echo 'N/A')"
+    echo ""
+    
+    # Check for uncommitted changes
+    local status_output=$(git -C "$worktree_path" status --porcelain 2>/dev/null)
+    if [ -n "$status_output" ]; then
+      echo "⚠️  WARNING: This worktree has uncommitted changes:"
+      echo "$status_output" | head -5
+      echo ""
+    fi
+
+    # Confirmation prompt
+    echo "❓ Are you sure you want to delete this worktree? [y/N]:"
+    read -q confirmation
+    echo ""
+
+    if [[ "$confirmation" != "y" ]]; then
+      echo "🚫 Deletion cancelled"
+      return 0
+    fi
+
+    # Delete the worktree
+    if git worktree remove "$worktree_path" --force; then
+      echo "✅ Worktree deleted successfully: $worktree_path"
+    else
+      echo "❌ Failed to delete worktree: $worktree_path"
+      echo "   You may need to delete it manually or use --force flag"
+      return 1
+    fi
+  fi
+
+  # Only clear screen if ZLE is active
+  if zle; then
+    zle clear-screen
+  fi
+}
+

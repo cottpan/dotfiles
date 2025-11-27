@@ -1,0 +1,89 @@
+# fnewtree - create new git worktree for selected branch
+fbrwtree() {
+  local branches branch selected_branch worktree_path
+  
+  # Get all branches (local and remote, excluding HEAD)
+  branches=$(git branch --all | grep -v HEAD) &&
+  
+  # Select branch using fzf
+  branch=$(echo "$branches" |
+    fzf --prompt="branches > " \
+        --header="Select a branch to create worktree" \
+        --preview="echo '📦 Branch info:' && git log --oneline --decorate -10 \$(echo {} | sed 's/.* //' | sed 's#remotes/[^/]*/##')" \
+        --preview-window="right:50%" \
+        --reverse \
+        --border \
+        --ansi)
+
+  if [ $? -ne 0 ]; then
+    return 0
+  fi
+
+  if [ -n "$branch" ]; then
+    # Extract raw branch reference (preserve full remote path)
+    local branch_ref=$(echo "$branch" | sed "s/.* //")
+    
+    # Clean branch name for directory naming (remove prefix markers and remote path)
+    selected_branch=$(echo "$branch_ref" | sed "s#remotes/[^/]*/##")
+    
+    # Get current project directory name
+    local current_dir=$(basename $(git rev-parse --show-toplevel))
+    local worktree_base_dir="${HOME}/${current_dir}.worktree"
+    local default_path="${worktree_base_dir}/${selected_branch}"
+    
+    # Ask for worktree path
+    echo "Enter worktree path (default: ${default_path}):"
+    read worktree_path
+    
+    # Use default if empty
+    if [ -z "$worktree_path" ]; then
+      worktree_path="$default_path"
+    fi
+
+    # Create worktree base directory if it doesn't exist
+    local worktree_dir=$(dirname "$worktree_path")
+    if [ ! -d "$worktree_dir" ]; then
+      echo "📁 Creating worktree directory: $worktree_dir"
+      mkdir -p "$worktree_dir"
+    fi
+
+    # Create the worktree using the full branch reference
+    echo "📦 Creating worktree from: $branch_ref"
+    if git worktree add "$worktree_path" "$branch_ref"; then
+      echo "✅ Worktree created successfully: $worktree_path"
+      
+      # Ask if user wants to open with VSCode
+      echo "💻 Open with VSCode? [y/N]:"
+      read -q open_vscode
+      echo ""
+      
+      if [[ "$open_vscode" == "y" ]]; then
+        if command -v code &> /dev/null; then
+          echo "🚀 Opening VSCode..."
+          code "$worktree_path"
+        else
+          echo "❌ VSCode (code command) not found"
+        fi
+      fi
+      
+      # Navigate to the new worktree
+      if zle; then
+        # Called from ZLE (keyboard shortcut)
+        BUFFER="cd ${worktree_path}"
+        zle accept-line
+      else
+        # Called directly from command line
+        cd "$worktree_path"
+      fi
+    else
+      echo "❌ Failed to create worktree"
+      return 1
+    fi
+  fi
+
+  # Only clear screen if ZLE is active
+  if zle; then
+    zle clear-screen
+  fi
+}
+

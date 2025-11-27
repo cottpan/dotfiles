@@ -1,0 +1,15 @@
+fbas() {
+    local bastion_host=$(cat ~/.bastion/config |
+        grep -i ^host |
+        awk '{print $2}' |
+        fzf --prompt "Select Bastion Host. > " \
+          --height 50% --layout=reverse --border --preview-window 'right:50%' \
+        --preview "grep {} -A2 ~/.bastion/config")
+
+    if [ "$bastion_host" = "" ]; then
+        # ex) Ctrl-C.
+        return 1
+    fi
+    connect_bastion ${bastion_host}
+}
+

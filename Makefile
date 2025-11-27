@@ -20,6 +20,8 @@ install: ## Create symlink to home directory
 	@mkdir -p $(HOME)/.config
 	@echo 'Deploying .config subdirectories...'
 	@$(foreach val, $(CONFIG_DIRS), ln -sfnv $(abspath $(val)) $(HOME)/$(val);)
+	@echo 'Creating .zsh symlink...'
+	@ln -sfnv $(DOTPATH)/.zsh $(HOME)/.zsh
 
 deploy: ## Deploy
 	@$(DOTPATH)/etc/init/install.sh
@@ -29,6 +31,8 @@ clean: ## Remove the dot files
 	@-$(foreach val, $(DOTFILES), rm -vrf $(HOME)/$(val);)
 	@echo 'Remove .config subdirectories...'
 	@-$(foreach val, $(CONFIG_DIRS), rm -vrf $(HOME)/$(val);)
+	@echo 'Remove .zsh symlink...'
+	@-rm -vrf $(HOME)/.zsh
 
 help: ## Self-documented Makefile
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \

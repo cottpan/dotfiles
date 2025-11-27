@@ -17,94 +17,15 @@ zplug "ascii-soup/zsh-url-highlighter"
 
 # tools
 zplug "marzocchi/zsh-notify"
-
 zplug mafredri/zsh-async, from:github
 zplug sindresorhus/pure, use:pure.zsh, from:github, as:theme
 
-# fh - repeat history
-fh() {
-  eval $( ([ -n "$ZSH_NAME" ] && fc -l 1 || history) | fzf +s --tac | sed 's/ *[0-9]* *//')
-}
-
-# fkill - kill process
-fkill() {
-  local pid
-  pid=$(ps -ef | sed 1d | fzf -m | awk '{print $2}')
-
-  if [ "x$pid" != "x" ]
-  then
-    echo $pid | xargs kill -${1:-9}
-  fi
-}
-
-#fbr - checkout git branch (including remote branches)
-fbr() {
-  local branches branch
-  branches=$(git branch --all | grep -v HEAD) &&
-  branch=$(echo "$branches" |
-    fzf-tmux -d $(( 2 + $(wc -l <<< "$branches") )) +m) &&
-  git checkout $(echo "$branch" | sed "s/.* //" | sed "s#remotes/[^/]*/##")
-}
-
-# fshow - git commit browser
-fshow() {
-  git log --graph --color=always \
-      --format="%C(auto)%h%d %s %C(black)%C(bold)%cr" "$@" |
-  fzf --ansi --no-sort --reverse --tiebreak=index --bind=ctrl-s:toggle-sort \
-      --bind "ctrl-m:execute:
-                (grep -o '[a-f0-9]\{7\}' | head -1 |
-                xargs -I % sh -c 'git show --color=always % | less -R') << 'FZF-EOF'
-                {}
-FZF-EOF"
-}
-
-# fd - cd to selected directory
-fd() {
-  local dir
-  dir=$(find ${1:-.} -path '*/\.*' -prune \
-                  -o -type d -print 2> /dev/null | fzf +m) &&
-  cd "$dir"
-}
-
-# Set AWS PROFILE using fzf.
-fpro() {
-  # Select AWS PROFILE
-  local selected_profile=$(aws configure list-profiles |
-    grep -v "default" |
-    sort |
-    fzf --prompt "Select PROFILE. If press Ctrl-C, unset PROFILE. > " \
-        --height 50% --layout=reverse --border --preview-window 'right:50%' \
-        --preview "grep {} -A5 ~/.aws/config")
-
-  # If the profile is not selected, unset the environment variable 'AWS_PROFILE', etc.
-  if [ -z "$selected_profile" ]; then
-    echo "Unset env 'AWS_PROFILE'!"
-    unset AWS_PROFILE
-    unset AWS_ACCESS_KEY_ID
-    unset AWS_SECRET_ACCESS_KEY
-    return
-  fi
-
-  # If a profile is selected, set the environment variable 'AWS_PROFILE'.
-  echo "Set the environment variable 'AWS_PROFILE' to '${selected_profile}'!"
-  export AWS_PROFILE="$selected_profile"
-  unset AWS_ACCESS_KEY_ID
-  unset AWS_SECRET_ACCESS_KEY
-  
-  # Check sso-session 
-  local AWS_SSO_SESSION_NAME="dc-sso"  # sso-sessionの名称に変更
-
-  check_sso_session=$(aws sts get-caller-identity 2>&1)
-  if [[ "$check_sso_session" == *"Token has expired"* ]]; then
-    # If the session has expired, log in again.
-    echo -e "\n----------------------------\nYour Session has expired! Please login...\n----------------------------\n"
-    aws sso login --sso-session "${AWS_SSO_SESSION_NAME}"
-    aws sts get-caller-identity
-  else
-    # Display account information upon successful login, and show an error message upon login failure.
-    echo ${check_sso_session}
-  fi
-}
+# Load custom functions from .zsh/functions directory
+if [ -d "$HOME/.zsh/functions" ]; then
+  for func_file in $HOME/.zsh/functions/*; do
+    source "$func_file"
+  done
+fi
 
 connect_bastion() {
   local name=$1
@@ -167,21 +88,6 @@ function start_bastion_session() {
             "localPortNumber":["'"$port"'"],
             "host":["'"$host"'"]
         }'
-}
-
-fbas() {
-    local bastion_host=$(cat ~/.bastion/config |
-        grep -i ^host |
-        awk '{print $2}' |
-        fzf --prompt "Select Bastion Host. > " \
-          --height 50% --layout=reverse --border --preview-window 'right:50%' \
-        --preview "grep {} -A2 ~/.bastion/config")
-
-    if [ "$bastion_host" = "" ]; then
-        # ex) Ctrl-C.
-        return 1
-    fi
-    connect_bastion ${bastion_host}
 }
 
 if [ -n "$LS_COLORS" ]; then
