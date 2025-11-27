@@ -74,7 +74,7 @@ Description:
 
     # Get PR details to fetch the branch safely
     echo "📥 Fetching PR branch..."
-    local pr_details=$(gh pr view "$pr_number" --json headRepository,headRefName,baseRepository --template '{{.headRepository.owner.login}}/{{.headRepository.name}}:{{.headRefName}}:{{.baseRepository.owner.login}}/{{.baseRepository.name}}')
+    local pr_details=$(gh pr view "$pr_number" --json isCrossRepository,headRepository,headRefName,headRepositoryOwner --template '{{.isCrossRepository}}:{{.headRepositoryOwner.login}}/{{.headRepository.name}}:{{.headRefName}}')
     
     if [ -z "$pr_details" ]; then
       echo "❌ Failed to get PR details"
@@ -82,12 +82,12 @@ Description:
     fi
     
     # Parse PR details
-    local head_repo=$(echo "$pr_details" | cut -d':' -f1)
-    local head_branch=$(echo "$pr_details" | cut -d':' -f2)
-    local base_repo=$(echo "$pr_details" | cut -d':' -f3)
+    local is_cross_repo=$(echo "$pr_details" | cut -d':' -f1)
+    local head_repo=$(echo "$pr_details" | cut -d':' -f2)
+    local head_branch=$(echo "$pr_details" | cut -d':' -f3)
     
     # Check if PR is from a fork or same repository
-    if [[ "$head_repo" != "$base_repo" ]]; then
+    if [[ "$is_cross_repo" == "true" ]]; then
       # Fork PR: add remote if it doesn't exist and fetch
       local remote_name="pr-${pr_number}-remote"
       local remote_url="https://github.com/${head_repo}.git"
