@@ -1,0 +1,149 @@
+# fprwtree - create worktree from selected Pull Request
+fprwtree() {
+  # Check if gh command is available
+  if ! command -v gh &> /dev/null; then
+    echo "❌ GitHub CLI (gh) is not installed. Please install it first."
+    echo "   brew install gh"
+    return 1
+  fi
+
+  # Check if we're in a git repository
+  if ! git rev-parse --git-dir &> /dev/null; then
+    echo "❌ Not in a git repository"
+    return 1
+  fi
+
+  local prs selected_pr pr_number branch_name worktree_path
+
+  # Get PR list with custom format: #number | title | author | head_branch
+  echo "🔍 Fetching pull requests..."
+  prs=$(gh pr list --state open --limit 50 --json number,title,author,headRefName --template '{{range .}}#{{.number}} | {{.title}} | @{{.author.login}} | {{.headRefName}}{{"\n"}}{{end}}')
+
+  if [ -z "$prs" ]; then
+    echo "📭 No open pull requests found"
+    return 0
+  fi
+
+  # Select PR using fzf
+  selected_pr=$(echo "$prs" | fzf \
+    --prompt="PRs > " \
+    --header="Select a Pull Request to create worktree" \
+    --preview="echo {} | cut -d'|' -f1 | sed 's/^#//' | xargs -I {} gh pr view {} --json title,author,body,headRefName,url --template 'Title: {{.title}}
+Author: @{{.author.login}}
+Branch: {{.headRefName}}
+URL: {{.url}}
+
+Description:
+{{.body}}'" \
+    --preview-window="right:60%" \
+    --reverse \
+    --border \
+    --ansi \
+    --delimiter="|" \
+    --with-nth="1,2,3")
+
+  if [ $? -ne 0 ]; then
+    return 0
+  fi
+
+  if [ -n "$selected_pr" ]; then
+    # Extract PR number and branch name
+    pr_number=$(echo "$selected_pr" | cut -d'|' -f1 | sed 's/^#//' | tr -d ' ')
+    branch_name=$(echo "$selected_pr" | cut -d'|' -f4 | tr -d ' ')
+    
+    # Get current project directory name
+    local current_dir=$(basename $(git rev-parse --show-toplevel))
+    local worktree_base_dir="${HOME}/${current_dir}.worktree"
+    local default_path="${worktree_base_dir}/pr-${pr_number}-${branch_name}"
+    
+    # Ask for worktree path
+    echo "Enter worktree path (default: ${default_path}):"
+    read worktree_path
+    
+    # Use default if empty
+    if [ -z "$worktree_path" ]; then
+      worktree_path="$default_path"
+    fi
+
+    # Create worktree base directory if it doesn't exist
+    local worktree_dir=$(dirname "$worktree_path")
+    if [ ! -d "$worktree_dir" ]; then
+      echo "📁 Creating worktree directory: $worktree_dir"
+      mkdir -p "$worktree_dir"
+    fi
+
+    # Get PR details to fetch the branch safely
+    echo "📥 Fetching PR branch..."
+    local pr_details=$(gh pr view "$pr_number" --json headRepository,headRefName,baseRepository --template '{{.headRepository.owner.login}}/{{.headRepository.name}}:{{.headRefName}}:{{.baseRepository.owner.login}}/{{.baseRepository.name}}')
+    
+    if [ -z "$pr_details" ]; then
+      echo "❌ Failed to get PR details"
+      return 1
+    fi
+    
+    # Parse PR details
+    local head_repo=$(echo "$pr_details" | cut -d':' -f1)
+    local head_branch=$(echo "$pr_details" | cut -d':' -f2)
+    local base_repo=$(echo "$pr_details" | cut -d':' -f3)
+    
+    # Check if PR is from a fork or same repository
+    if [[ "$head_repo" != "$base_repo" ]]; then
+      # Fork PR: add remote if it doesn't exist and fetch
+      local remote_name="pr-${pr_number}-remote"
+      local remote_url="https://github.com/${head_repo}.git"
+      
+      if ! git remote get-url "$remote_name" &> /dev/null; then
+        echo "🔗 Adding remote: $remote_name"
+        git remote add "$remote_name" "$remote_url"
+      fi
+      
+      echo "📦 Fetching from fork..."
+      git fetch "$remote_name" "$head_branch"
+      local full_branch_ref="${remote_name}/${head_branch}"
+    else
+      # Same repository PR: fetch the branch
+      echo "📦 Fetching branch..."
+      git fetch origin "$head_branch"
+      local full_branch_ref="origin/${head_branch}"
+    fi
+
+    # Create the worktree
+    if git worktree add "$worktree_path" "$full_branch_ref"; then
+      echo "✅ Worktree created successfully: $worktree_path"
+      echo "🔗 PR #${pr_number}: $(echo "$selected_pr" | cut -d'|' -f2 | sed 's/^ *//')"
+      
+      # Ask if user wants to open with VSCode
+      echo "💻 Open with VSCode? [y/N]:"
+      read -q open_vscode
+      echo ""
+      
+      if [[ "$open_vscode" == "y" ]]; then
+        if command -v code &> /dev/null; then
+          echo "🚀 Opening VSCode..."
+          code "$worktree_path"
+        else
+          echo "❌ VSCode (code command) not found"
+        fi
+      fi
+      
+      # Navigate to the new worktree
+      if zle; then
+        # Called from ZLE (keyboard shortcut)
+        BUFFER="cd ${worktree_path}"
+        zle accept-line
+      else
+        # Called directly from command line
+        cd "$worktree_path"
+      fi
+    else
+      echo "❌ Failed to create worktree"
+      return 1
+    fi
+  fi
+
+  # Only clear screen if ZLE is active
+  if zle; then
+    zle clear-screen
+  fi
+}
+
