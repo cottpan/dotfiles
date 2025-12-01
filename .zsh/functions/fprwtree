@@ -51,9 +51,11 @@ Description:
     pr_number=$(echo "$selected_pr" | cut -d'|' -f1 | sed 's/^#//' | tr -d ' ')
     branch_name=$(echo "$selected_pr" | cut -d'|' -f4 | tr -d ' ')
     
-    # Get current project directory name
-    local current_dir=$(basename $(git rev-parse --show-toplevel))
-    local worktree_base_dir="${HOME}/${current_dir}.worktree"
+    # Get current project directory name and parent directory
+    local git_root=$(git rev-parse --show-toplevel)
+    local current_dir=$(basename "$git_root")
+    local parent_dir=$(dirname "$git_root")
+    local worktree_base_dir="${parent_dir}/${current_dir}.worktree"
     local default_path="${worktree_base_dir}/pr-${pr_number}-${branch_name}"
     
     # Ask for worktree path

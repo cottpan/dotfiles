@@ -26,9 +26,11 @@ fbrwtree() {
     # Clean branch name for directory naming (remove prefix markers and remote path)
     selected_branch=$(echo "$branch_ref" | sed "s#remotes/[^/]*/##")
     
-    # Get current project directory name
-    local current_dir=$(basename $(git rev-parse --show-toplevel))
-    local worktree_base_dir="${HOME}/${current_dir}.worktree"
+    # Get current project directory name and parent directory
+    local git_root=$(git rev-parse --show-toplevel)
+    local current_dir=$(basename "$git_root")
+    local parent_dir=$(dirname "$git_root")
+    local worktree_base_dir="${parent_dir}/${current_dir}.worktree"
     local default_path="${worktree_base_dir}/${selected_branch}"
     
     # Ask for worktree path
