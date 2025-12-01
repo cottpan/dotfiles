@@ -1,7 +1,13 @@
 fsession() {
   local session
-  session=$(tmux list-sessions -F "#{session_name}" | \
-    fzf --query="$1" --select-1 --exit-0) &&
-  tmux switch-client -t "$session"
+  session=$(tmux list-sessions -F "#{session_name}" 2>/dev/null | \
+    fzf --query="$1" --select-1 --exit-0) || return
+  
+  if [ -n "$TMUX" ]; then
+    # tmux セッション内にいる場合は switch-client を使用
+    tmux switch-client -t "$session"
+  else
+    # tmux セッション外にいる場合は attach-session を使用
+    tmux attach-session -t "$session"
+  fi
 }
-
