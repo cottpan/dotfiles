@@ -96,23 +96,27 @@ fnewtree() {
     read -q open_vscode
     echo ""
     
+    local should_cd=true
     if [[ "$open_vscode" == "y" ]]; then
       if command -v code &> /dev/null; then
         echo "🚀 Opening VSCode..."
         code "$worktree_path"
+        should_cd=false
       else
         echo "❌ VSCode (code command) not found"
       fi
     fi
     
-    # Navigate to the new worktree
-    if zle; then
-      # Called from ZLE (keyboard shortcut)
-      BUFFER="cd ${worktree_path}"
-      zle accept-line
-    else
-      # Called directly from command line
-      cd "$worktree_path"
+    # Navigate to the new worktree only if VSCode was not opened
+    if [[ "$should_cd" == true ]]; then
+      if zle; then
+        # Called from ZLE (keyboard shortcut)
+        BUFFER="cd ${worktree_path}"
+        zle accept-line
+      else
+        # Called directly from command line
+        cd "$worktree_path"
+      fi
     fi
   else
     echo "❌ Failed to create branch and worktree"
