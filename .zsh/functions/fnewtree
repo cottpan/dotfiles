@@ -1,0 +1,128 @@
+# fnewtree - create new branch and worktree
+fnewtree() {
+  # Check if we're in a git repository
+  if ! git rev-parse --git-dir &> /dev/null; then
+    echo "❌ Not in a git repository"
+    return 1
+  fi
+
+  local branches base_branch selected_base new_branch_name worktree_path
+  
+  # Get all branches (local and remote, excluding HEAD)
+  branches=$(git branch --all | grep -v HEAD)
+  
+  # Select base branch using fzf
+  echo "🌿 Select base branch to create new branch from:"
+  base_branch=$(echo "$branches" |
+    fzf --prompt="base branch > " \
+        --header="Select a base branch for the new branch" \
+        --preview="echo '📦 Branch info:' && git log --oneline --decorate -10 \$(echo {} | sed 's/.* //' | sed 's#remotes/[^/]*/##')" \
+        --preview-window="right:50%" \
+        --reverse \
+        --border \
+        --ansi)
+
+  if [ $? -ne 0 ]; then
+    return 0
+  fi
+
+  if [ -z "$base_branch" ]; then
+    echo "❌ No base branch selected"
+    return 1
+  fi
+
+  # Extract raw branch reference (preserve full remote path)
+  selected_base=$(echo "$base_branch" | sed "s/.* //")
+  
+  # Ask for new branch name
+  echo ""
+  echo "🏷️  Enter new branch name:"
+  read new_branch_name
+  
+  if [ -z "$new_branch_name" ]; then
+    echo "❌ Branch name cannot be empty"
+    return 1
+  fi
+
+  # Check if branch already exists
+  if git show-ref --verify --quiet "refs/heads/$new_branch_name"; then
+    echo "❌ Branch '$new_branch_name' already exists"
+    return 1
+  fi
+
+  # Get current project directory name and parent directory
+  local git_root=$(git rev-parse --show-toplevel)
+  local current_dir=$(basename "$git_root")
+  local parent_dir=$(dirname "$git_root")
+  local worktree_base_dir="${parent_dir}/${current_dir}.worktree"
+  local default_path="${worktree_base_dir}/${new_branch_name}"
+  
+  # Ask for worktree path
+  echo ""
+  echo "📁 Enter worktree path (default: ${default_path}):"
+  read worktree_path
+  
+  # Use default if empty
+  if [ -z "$worktree_path" ]; then
+    worktree_path="$default_path"
+  fi
+
+  # Create worktree base directory if it doesn't exist
+  local worktree_dir=$(dirname "$worktree_path")
+  if [ ! -d "$worktree_dir" ]; then
+    echo "📁 Creating worktree directory: $worktree_dir"
+    mkdir -p "$worktree_dir"
+  fi
+
+  # Check if worktree path already exists
+  if [ -e "$worktree_path" ]; then
+    echo "❌ Path already exists: $worktree_path"
+    return 1
+  fi
+
+  # Create the worktree with new branch
+  echo ""
+  echo "🌿 Creating new branch '$new_branch_name' from '$selected_base'..."
+  echo "📦 Creating worktree at: $worktree_path"
+  
+  if git worktree add -b "$new_branch_name" "$worktree_path" "$selected_base"; then
+    echo "✅ Branch and worktree created successfully!"
+    echo "   Branch: $new_branch_name"
+    echo "   Path: $worktree_path"
+    
+    # Ask if user wants to open with VSCode
+    echo ""
+    echo "💻 Open with VSCode? [y/N]:"
+    read -q open_vscode
+    echo ""
+    
+    if [[ "$open_vscode" == "y" ]]; then
+      if command -v code &> /dev/null; then
+        echo "🚀 Opening VSCode..."
+        code "$worktree_path"
+      else
+        echo "❌ VSCode (code command) not found"
+      fi
+    fi
+    
+    # Navigate to the new worktree
+    if zle; then
+      # Called from ZLE (keyboard shortcut)
+      BUFFER="cd ${worktree_path}"
+      zle accept-line
+    else
+      # Called directly from command line
+      cd "$worktree_path"
+    fi
+  else
+    echo "❌ Failed to create branch and worktree"
+    return 1
+  fi
+
+  # Only clear screen if ZLE is active
+  if zle; then
+    zle clear-screen
+  fi
+}
+
+
