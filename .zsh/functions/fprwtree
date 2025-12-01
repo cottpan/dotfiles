@@ -1,4 +1,25 @@
-# fprwtree - create worktree from selected Pull Request
+#!/usr/bin/env zsh
+#
+# fprwtree - Git Worktree Creation from Pull Request
+#
+# Description:
+#   GitHub の Pull Request を fzf で選択して worktree を作成
+#   Fork からの PR にも対応（自動的にリモートを追加）
+#   作成場所: <親ディレクトリ>/<プロジェクト名>.worktree/pr-<番号>-<ブランチ名>
+#
+# Features:
+#   - PR のタイトル、作者、説明をプレビュー表示
+#   - Fork PR の場合は自動的にリモートリポジトリを追加
+#   - ローカルブランチを自動作成（detached HEAD にならない）
+#   - worktree パスのカスタマイズが可能
+#   - VSCode での自動オープンオプション
+#
+# Requirements:
+#   - GitHub CLI (gh) のインストールが必要
+#
+# Usage:
+#   fprwtree
+#
 fprwtree() {
   # Check if gh command is available
   if ! command -v gh &> /dev/null; then
@@ -109,8 +130,18 @@ Description:
       local full_branch_ref="origin/${head_branch}"
     fi
 
-    # Create the worktree
-    if git worktree add "$worktree_path" "$full_branch_ref"; then
+    # Create the worktree with a local branch
+    # Check if local branch already exists
+    local local_branch_name="$head_branch"
+    if git show-ref --verify --quiet "refs/heads/$local_branch_name"; then
+      echo "📌 Local branch '$local_branch_name' already exists, using it"
+      git worktree add "$worktree_path" "$local_branch_name"
+    else
+      echo "🌿 Creating local branch '$local_branch_name' from '$full_branch_ref'"
+      git worktree add -b "$local_branch_name" "$worktree_path" "$full_branch_ref"
+    fi
+    
+    if [ $? -eq 0 ]; then
       echo "✅ Worktree created successfully: $worktree_path"
       echo "🔗 PR #${pr_number}: $(echo "$selected_pr" | cut -d'|' -f2 | sed 's/^ *//')"
       

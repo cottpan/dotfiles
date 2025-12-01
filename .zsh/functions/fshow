@@ -1,4 +1,19 @@
-# fshow - git commit browser
+#!/usr/bin/env zsh
+#
+# fshow - Git Commit Browser with fzf
+#
+# Description:
+#   git コミット履歴を fzf でインタラクティブに閲覧
+#   Enter でコミット詳細を less で表示
+#   Ctrl-S でソート順を切り替え
+#
+# Usage:
+#   fshow [git-log-options]
+#
+# Example:
+#   fshow                    # 全コミット履歴を表示
+#   fshow --author="John"    # 特定の作者のコミットを表示
+#
 fshow() {
   git log --graph --color=always \
       --format="%C(auto)%h%d %s %C(black)%C(bold)%cr" "$@" |

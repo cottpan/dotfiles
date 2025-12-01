@@ -1,4 +1,15 @@
-# Delete (one or multiple) selected application(s)
+#!/usr/bin/env zsh
+#
+# funbrew - Homebrew Package Uninstall with fzf
+#
+# Description:
+#   インストール済みの Homebrew パッケージを fzf で選択してアンインストール
+#   複数パッケージの同時選択・アンインストールが可能（Tab で複数選択）
+#   brew leaves でトップレベルパッケージのみを表示
+#
+# Usage:
+#   funbrew
+#
 funbrew() {
   local uninst=$(brew leaves | fzf -m)
 

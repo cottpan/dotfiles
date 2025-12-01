@@ -1,4 +1,20 @@
-# fnewtree - create new git worktree for selected branch
+#!/usr/bin/env zsh
+#
+# fbrwtree - Git Worktree Creation from Existing Branch
+#
+# Description:
+#   既存の git ブランチ（ローカル・リモート）を fzf で選択して worktree を作成
+#   リモートブランチの場合は自動的にローカルブランチを作成
+#   作成場所: <親ディレクトリ>/<プロジェクト名>.worktree/<ブランチ名>
+#   
+# Features:
+#   - ブランチのコミット履歴をプレビュー表示
+#   - worktree パスのカスタマイズが可能
+#   - VSCode での自動オープンオプション
+#
+# Usage:
+#   fbrwtree
+#
 fbrwtree() {
   local branches branch selected_branch worktree_path
   
@@ -49,9 +65,25 @@ fbrwtree() {
       mkdir -p "$worktree_dir"
     fi
 
-    # Create the worktree using the full branch reference
-    echo "📦 Creating worktree from: $branch_ref"
-    if git worktree add "$worktree_path" "$branch_ref"; then
+    # Determine if it's a remote branch and needs local branch creation
+    local local_branch_name="$selected_branch"
+    
+    if [[ "$branch_ref" =~ ^remotes/ ]]; then
+      # Remote branch: need to create a local branch
+      if git show-ref --verify --quiet "refs/heads/$local_branch_name"; then
+        echo "📌 Local branch '$local_branch_name' already exists, using it"
+        git worktree add "$worktree_path" "$local_branch_name"
+      else
+        echo "🌿 Creating local branch '$local_branch_name' from '$branch_ref'"
+        git worktree add -b "$local_branch_name" "$worktree_path" "$branch_ref"
+      fi
+    else
+      # Local branch: use directly
+      echo "📦 Creating worktree from local branch: $branch_ref"
+      git worktree add "$worktree_path" "$branch_ref"
+    fi
+    
+    if [ $? -eq 0 ]; then
       echo "✅ Worktree created successfully: $worktree_path"
       
       # Ask if user wants to open with VSCode

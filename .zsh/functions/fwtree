@@ -1,3 +1,14 @@
+#!/usr/bin/env zsh
+#
+# fwtree - Git Worktree Navigator with fzf
+#
+# Description:
+#   既存の git worktree を fzf で選択してディレクトリ移動
+#   各 worktree のブランチ名、変更ファイル、コミット履歴をプレビュー表示
+#
+# Usage:
+#   fwtree
+#
 fwtree() {
   # Format of `git worktree list`: path commit [branch]
   local selected_worktree=$(git worktree list | fzf \
