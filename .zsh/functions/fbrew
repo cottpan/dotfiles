@@ -1,5 +1,18 @@
-# Install (one or multiple) selected application(s)
-# using "brew search" as source input
+#!/usr/bin/env zsh
+#
+# fbrew - Homebrew Package Install with fzf
+#
+# Description:
+#   Homebrew パッケージを fzf で検索・選択してインストール
+#   複数パッケージの同時選択・インストールが可能（Tab で複数選択）
+#
+# Usage:
+#   fbrew [search_query]
+#
+# Example:
+#   fbrew node     # "node" で検索してインストール
+#   fbrew          # 全パッケージから選択
+#
 fbrew() {
   local inst=$(brew search "$@" | fzf -m)
 

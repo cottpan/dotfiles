@@ -1,4 +1,14 @@
-#fbr - checkout git branch (including remote branches)
+#!/usr/bin/env zsh
+#
+# fbr - Git Branch Checkout with fzf
+#
+# Description:
+#   git ブランチ（ローカル・リモート含む）を fzf で選択してチェックアウト
+#   リモートブランチを選択した場合は、自動的にローカルブランチとして作成
+#
+# Usage:
+#   fbr
+#
 fbr() {
   local branches branch
   branches=$(git branch --all | grep -v HEAD) &&

@@ -1,4 +1,20 @@
-# fdeltree - delete selected git worktree
+#!/usr/bin/env zsh
+#
+# fdeltree - Git Worktree Deletion with fzf
+#
+# Description:
+#   git worktree を fzf で選択して削除
+#   worktree 削除後、関連するブランチも削除するか選択可能
+#
+# Features:
+#   - worktree のブランチ名、変更ファイル、コミット履歴をプレビュー
+#   - 未コミットの変更がある場合は警告表示
+#   - メイン worktree の削除は不可
+#   - カレントディレクトリが削除対象の場合はエラー
+#
+# Usage:
+#   fdeltree
+#
 fdeltree() {
   # Check if we're in a git repository
   if ! git rev-parse --git-dir &> /dev/null; then
@@ -54,10 +70,13 @@ fdeltree() {
       return 1
     fi
 
+    # Get branch name before deletion
+    local branch_name=$(git -C "$worktree_path" branch --show-current 2>/dev/null)
+    
     # Show worktree details
     echo "🗂️  Worktree to delete:"
     echo "   Path: $worktree_path"
-    echo "   Branch: $(git -C "$worktree_path" branch --show-current 2>/dev/null || echo 'N/A')"
+    echo "   Branch: ${branch_name:-N/A}"
     echo ""
     
     # Check for uncommitted changes
@@ -81,6 +100,25 @@ fdeltree() {
     # Delete the worktree
     if git worktree remove "$worktree_path" --force; then
       echo "✅ Worktree deleted successfully: $worktree_path"
+      
+      # Ask if user wants to delete the branch too
+      if [ -n "$branch_name" ]; then
+        echo ""
+        echo "🌿 Delete branch '$branch_name' too? [y/N]:"
+        read -q delete_branch
+        echo ""
+        
+        if [[ "$delete_branch" == "y" ]]; then
+          if git branch -D "$branch_name"; then
+            echo "✅ Branch '$branch_name' deleted successfully"
+          else
+            echo "❌ Failed to delete branch '$branch_name'"
+            echo "   The branch might be checked out in another worktree or might not exist"
+          fi
+        else
+          echo "🔖 Branch '$branch_name' kept"
+        fi
+      fi
     else
       echo "❌ Failed to delete worktree: $worktree_path"
       echo "   You may need to delete it manually or use --force flag"

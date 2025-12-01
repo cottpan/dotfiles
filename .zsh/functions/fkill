@@ -1,4 +1,18 @@
-# fkill - kill process
+#!/usr/bin/env zsh
+#
+# fkill - Process Killer with fzf
+#
+# Description:
+#   実行中のプロセスを fzf で選択して kill
+#   複数プロセスの同時選択が可能（Tab で複数選択）
+#
+# Usage:
+#   fkill [signal_number]
+#
+# Example:
+#   fkill        # SIGKILL (9) でプロセスを kill
+#   fkill 15     # SIGTERM (15) でプロセスを kill
+#
 fkill() {
   local pid
   pid=$(ps -ef | sed 1d | fzf -m | awk '{print $2}')

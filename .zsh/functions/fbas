@@ -1,3 +1,14 @@
+#!/usr/bin/env zsh
+#
+# fbas - Bastion Host Connection with fzf
+#
+# Description:
+#   ~/.bastion/config から Bastion ホストを fzf で選択し、接続する
+#   選択時に設定内容をプレビュー表示
+#
+# Usage:
+#   fbas
+#
 fbas() {
     local bastion_host=$(cat ~/.bastion/config |
         grep -i ^host |

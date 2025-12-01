@@ -1,4 +1,18 @@
-# fd - cd to selected directory
+#!/usr/bin/env zsh
+#
+# fd - Directory Navigation with fzf
+#
+# Description:
+#   カレントディレクトリ配下のディレクトリを fzf で選択して移動
+#   隠しディレクトリ（.git など）は除外される
+#
+# Usage:
+#   fd [directory]
+#
+# Example:
+#   fd           # カレントディレクトリから検索
+#   fd ~/src     # ~/src 配下から検索
+#
 fd() {
   local dir
   dir=$(find ${1:-.} -path '*/\.*' -prune \

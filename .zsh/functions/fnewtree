@@ -1,4 +1,27 @@
-# fnewtree - create new branch and worktree
+#!/usr/bin/env zsh
+#
+# fnewtree - Create New Branch and Worktree
+#
+# Description:
+#   新しいブランチと worktree を同時に作成
+#   ベースブランチを fzf で選択し、新規ブランチ名を入力して作成
+#   作成場所: <親ディレクトリ>/<プロジェクト名>.worktree/<新ブランチ名>
+#
+# Features:
+#   - ベースブランチのコミット履歴をプレビュー表示
+#   - ブランチ名の重複チェック
+#   - worktree パスのカスタマイズが可能
+#   - VSCode での自動オープンオプション
+#
+# Usage:
+#   fnewtree
+#
+# Example:
+#   fnewtree
+#   > ベースブランチ選択 (例: main)
+#   > 新ブランチ名入力 (例: feat/new-feature)
+#   → ~/src/project.worktree/feat/new-feature が作成される
+#
 fnewtree() {
   # Check if we're in a git repository
   if ! git rev-parse --git-dir &> /dev/null; then

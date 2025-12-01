@@ -1,4 +1,20 @@
-# Set AWS PROFILE using fzf.
+#!/usr/bin/env zsh
+#
+# fpro - AWS Profile Switcher with fzf
+#
+# Description:
+#   AWS プロファイルを fzf で選択して環境変数 AWS_PROFILE を設定
+#   選択時に ~/.aws/config の内容をプレビュー表示
+#   Ctrl-C でプロファイルを解除（unset）可能
+#
+# Features:
+#   - AWS SSO セッションの有効期限チェック
+#   - 期限切れの場合は自動的に再ログイン
+#   - プロファイル設定後にアカウント情報を表示
+#
+# Usage:
+#   fpro
+#
 fpro() {
   # Select AWS PROFILE
   local selected_profile=$(aws configure list-profiles |

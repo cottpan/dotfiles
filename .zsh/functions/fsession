@@ -1,3 +1,19 @@
+#!/usr/bin/env zsh
+#
+# fsession - Tmux Session Switcher with fzf
+#
+# Description:
+#   tmux セッションを fzf で選択して切り替え／アタッチ
+#   tmux 内からの実行 → switch-client（セッション切り替え）
+#   tmux 外からの実行 → attach-session（セッションにアタッチ）
+#
+# Usage:
+#   fsession [query]
+#
+# Example:
+#   fsession          # 全セッションから選択
+#   fsession work     # "work" で絞り込んで選択
+#
 fsession() {
   local session
   session=$(tmux list-sessions -F "#{session_name}" 2>/dev/null | \
