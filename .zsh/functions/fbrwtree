@@ -86,25 +86,25 @@ fbrwtree() {
     if [ $? -eq 0 ]; then
       echo "✅ Worktree created successfully: $worktree_path"
       
-      # Copy .env files from main repository
+      # Copy .env and .mise.local.toml files from main repository
       local git_root=$(git rev-parse --show-toplevel)
-      local env_files=$(find "$git_root" -maxdepth 3 -name ".env*" -type f 2>/dev/null)
+      local config_files=$(find "$git_root" -maxdepth 3 \( -name ".env*" -o -name ".mise.local.toml" \) -type f 2>/dev/null)
       
-      if [ -n "$env_files" ]; then
+      if [ -n "$config_files" ]; then
         echo ""
-        echo "📄 Found .env files in main repository:"
-        echo "$env_files" | while read env_file; do
-          local rel_path=${env_file#$git_root/}
+        echo "📄 Found config files in main repository:"
+        echo "$config_files" | while read config_file; do
+          local rel_path=${config_file#$git_root/}
           echo "   $rel_path"
         done
         echo ""
-        echo "📋 Copy .env files to new worktree? [y/N]:"
-        read -q copy_env
+        echo "📋 Copy config files to new worktree? [y/N]:"
+        read -q copy_config
         echo ""
         
-        if [[ "$copy_env" == "y" ]]; then
-          echo "$env_files" | while read env_file; do
-            local rel_path=${env_file#$git_root/}
+        if [[ "$copy_config" == "y" ]]; then
+          echo "$config_files" | while read config_file; do
+            local rel_path=${config_file#$git_root/}
             local target_file="$worktree_path/$rel_path"
             local target_dir=$(dirname "$target_file")
             
@@ -114,14 +114,14 @@ fbrwtree() {
             fi
             
             # Copy file
-            if cp "$env_file" "$target_file"; then
+            if cp "$config_file" "$target_file"; then
               echo "   ✅ Copied: $rel_path"
             else
               echo "   ❌ Failed to copy: $rel_path"
             fi
           done
         else
-          echo "⏭️  Skipped copying .env files"
+          echo "⏭️  Skipped copying config files"
         fi
       fi
       
