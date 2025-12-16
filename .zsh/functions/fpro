@@ -42,15 +42,23 @@ fpro() {
   # Check sso-session 
   local AWS_SSO_SESSION_NAME="dc-sso"  # sso-sessionの名称に変更
 
-  check_sso_session=$(aws sts get-caller-identity 2>&1)
-  if [[ "$check_sso_session" == *"Token has expired"* ]]; then
-    # If the session has expired, log in again.
-    echo -e "\n----------------------------\nYour Session has expired! Please login...\n----------------------------\n"
+  # Check if the current session is valid
+  if ! aws sts get-caller-identity &>/dev/null; then
+    # If authentication fails (session expired or invalid), log in again
+    echo -e "\n----------------------------\nYour Session has expired or is invalid! Please login...\n----------------------------\n"
     aws sso login --sso-session "${AWS_SSO_SESSION_NAME}"
-    aws sts get-caller-identity
+    
+    # Verify login was successful
+    if aws sts get-caller-identity; then
+      echo -e "\n✅ Login successful!"
+    else
+      echo -e "\n❌ Login failed. Please check your configuration."
+      return 1
+    fi
   else
-    # Display account information upon successful login, and show an error message upon login failure.
-    echo ${check_sso_session}
+    # Session is valid, display account information
+    echo -e "\n✅ Session is active:"
+    aws sts get-caller-identity
   fi
 }
 
