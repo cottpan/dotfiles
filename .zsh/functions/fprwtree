@@ -146,43 +146,10 @@ Description:
       echo "🔗 PR #${pr_number}: $(echo "$selected_pr" | cut -d'|' -f2 | sed 's/^ *//')"
       
       # Copy .env and .mise.local.toml files from main repository
-      local git_root=$(git rev-parse --show-toplevel)
-      local config_files=$(find "$git_root" -maxdepth 3 \( -name ".env*" -o -name ".mise.local.toml" \) -type f 2>/dev/null)
-      
-      if [ -n "$config_files" ]; then
-        echo ""
-        echo "📄 Found config files in main repository:"
-        echo "$config_files" | while read config_file; do
-          local rel_path=${config_file#$git_root/}
-          echo "   $rel_path"
-        done
-        echo ""
-        echo "📋 Copy config files to new worktree? [y/N]:"
-        read -q copy_config
-        echo ""
-        
-        if [[ "$copy_config" == "y" ]]; then
-          echo "$config_files" | while read config_file; do
-            local rel_path=${config_file#$git_root/}
-            local target_file="$worktree_path/$rel_path"
-            local target_dir=$(dirname "$target_file")
-            
-            # Create directory if it doesn't exist
-            if [ ! -d "$target_dir" ]; then
-              mkdir -p "$target_dir"
-            fi
-            
-            # Copy file
-            if cp "$config_file" "$target_file"; then
-              echo "   ✅ Copied: $rel_path"
-            else
-              echo "   ❌ Failed to copy: $rel_path"
-            fi
-          done
-        else
-          echo "⏭️  Skipped copying config files"
-        fi
-      fi
+      __worktree_copy_config_files "$git_root" "$worktree_path"
+
+      # Run project-specific setup if applicable
+      __worktree_run_project_setup "$worktree_path" "$current_dir"
       
       # Ask if user wants to open with VSCode
       echo "💻 Open with VSCode? [y/N]:"

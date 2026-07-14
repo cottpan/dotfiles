@@ -27,6 +27,10 @@ if [ -d "$HOME/.zsh/functions" ]; then
   done
 fi
 
+DRESSCODE_BACKEND_DIR="$HOME/src/dc/dresscode-backend"
+[ -f "$DRESSCODE_BACKEND_DIR/v2/scripts/start-bastion-session.sh" ] \
+  && source "$DRESSCODE_BACKEND_DIR/v2/scripts/start-bastion-session.sh"
+
 connect_bastion() {
   local name=$1
   # ホストを取得
@@ -40,7 +44,8 @@ connect_bastion() {
   local bastion_profile=$(echo "$config_result" | awk -F, '{print $3}')
   local bastion_port=$(echo "$config_result" | awk -F, '{print $4}')
   
-  start_bastion_session "$bastion_profile" "$bastion_host" "$bastion_port"
+  echo "start_bastion_session $bastion_profile $bastion_port"
+  start_bastion_session "$bastion_profile" "$bastion_port"
 }
 
 function parse_bastion_config() {
@@ -66,29 +71,29 @@ function parse_bastion_config() {
 }
 
 ## AWS EC2 Bastion
-function start_bastion_session() {
-    local profile=$1 # aws profile
-    local host=$2 # db host
-    local port=$3 # local port
+# function start_bastion_session() {
+#     local profile=$1 # aws profile
+#     local host=$2 # db host
+#     local port=$3 # local port
 
-    AWS_EC2_BASTION_ID=$(
-        aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=*bastion*" \
-                      "Name=instance-state-name,Values=running" \
-            --query "Reservations[*].Instances[*].InstanceId" \
-            --output text \
-            --profile "$profile" | head -1
-    )
-    aws ssm start-session \
-        --profile "$profile" \
-        --target $AWS_EC2_BASTION_ID \
-        --document-name AWS-StartPortForwardingSessionToRemoteHost \
-        --parameters '{
-            "portNumber":["5432"],
-            "localPortNumber":["'"$port"'"],
-            "host":["'"$host"'"]
-        }'
-}
+#     AWS_EC2_BASTION_ID=$(
+#         aws ec2 describe-instances \
+#             --filters "Name=tag:Name,Values=*bastion*" \
+#                       "Name=instance-state-name,Values=running" \
+#             --query "Reservations[*].Instances[*].InstanceId" \
+#             --output text \
+#             --profile "$profile" | head -1
+#     )
+#     aws ssm start-session \
+#         --profile "$profile" \
+#         --target $AWS_EC2_BASTION_ID \
+#         --document-name AWS-StartPortForwardingSessionToRemoteHost \
+#         --parameters '{
+#             "portNumber":["5432"],
+#             "localPortNumber":["'"$port"'"],
+#             "host":["'"$host"'"]
+#         }'
+# }
 
 if [ -n "$LS_COLORS" ]; then
     zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}

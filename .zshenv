@@ -8,6 +8,7 @@ export ANDROID_HOME="$HOME/Library/Android/sdk"
 export BUN_INSTALL="$HOME/.bun"
 
 path=(
+    $HOME/.local/bin(N-/)
     $HOME/bin(N-/)
     $HOME/.mint/bin(N-/)
     $HOME/.cargo/bin(N-/)
