@@ -47,18 +47,8 @@ else
     echo "warning: no OpenJDK devel package found in enabled repositories"
 fi
 
-# 標準リポジトリにないパッケージ（失敗しても続行）
-OPTIONAL_PACKAGES=(
-    scrcpy
-)
-
 echo "Installing packages via dnf..."
 sudo dnf install -y "${PACKAGES[@]}"
-
-if [ ${#OPTIONAL_PACKAGES[@]} -gt 0 ]; then
-    echo "Installing optional packages (skipping unavailable)..."
-    sudo dnf install -y --skip-unavailable "${OPTIONAL_PACKAGES[@]}" || true
-fi
 
 # Fedora の fd-find は fdfind コマンド名で提供される
 if ! command -v fd > /dev/null 2>&1 && command -v fdfind > /dev/null 2>&1; then
