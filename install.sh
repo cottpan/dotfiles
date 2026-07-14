@@ -76,9 +76,12 @@ if is_macos ; then
 elif is_linux ; then
     if is_fedora ; then
         echo "Fedora detected."
-        if ! command -v git > /dev/null 2>&1; then
-            echo "Installing git..."
-            sudo dnf install -y git
+        fedora_packages=()
+        command -v git > /dev/null 2>&1 || fedora_packages+=(git)
+        command -v make > /dev/null 2>&1 || fedora_packages+=(make)
+        if [ ${#fedora_packages[@]} -gt 0 ]; then
+            echo "Installing prerequisites: ${fedora_packages[*]}"
+            sudo dnf install -y "${fedora_packages[@]}"
         fi
     else
         echo "Unsupported Linux distribution. Abort."
