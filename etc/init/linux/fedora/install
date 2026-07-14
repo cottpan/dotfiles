@@ -24,6 +24,7 @@ PACKAGES=(
     jq
     libjxl
     libwebp-tools
+    make
     scrcpy
     yt-dlp
     zsh
