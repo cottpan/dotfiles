@@ -40,12 +40,13 @@ else
     echo "Unsupported OS. Skipping OS-specific package installation."
 fi
 
-# Deinのインストールスクリプトが対話型のため、CIでは無効にする
-set +u
+# dotfiles の .vimrc で dein を管理するため、dein-installer は使わない
 if [ -z "$CI" ] ; then
-    mkdir -p $HOME/.vim/backup
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/Shougo/dein-installer.vim/master/installer.sh)"
-    rm $HOME/.vimrc
-    mv $HOME/.vimrc.pre-dein-vim $HOME/.vimrc
+    mkdir -p "$HOME/.vim/backup"
+    dein_path="$HOME/.cache/dein/repos/github.com/Shougo/dein.vim"
+    if [ ! -d "$dein_path" ]; then
+        echo "Installing dein.vim..."
+        mkdir -p "$(dirname "$dein_path")"
+        git clone --depth 1 https://github.com/Shougo/dein.vim.git "$dein_path"
+    fi
 fi
-set -u
