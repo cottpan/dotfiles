@@ -76,12 +76,9 @@ if is_macos ; then
 elif is_linux ; then
     if is_fedora ; then
         echo "Fedora detected."
-        fedora_packages=()
-        command -v git > /dev/null 2>&1 || fedora_packages+=(git)
-        command -v make > /dev/null 2>&1 || fedora_packages+=(make)
-        if [ ${#fedora_packages[@]} -gt 0 ]; then
-            echo "Installing prerequisites: ${fedora_packages[*]}"
-            sudo dnf install -y "${fedora_packages[@]}"
+        if ! command -v git > /dev/null 2>&1; then
+            echo "Installing git..."
+            sudo dnf install -y git
         fi
     else
         echo "Unsupported Linux distribution. Abort."
@@ -93,6 +90,21 @@ else
 fi
 
 dotfiles_download
+
+if is_fedora && [ -d "${DOTPATH}" ]; then
+    prerequisites="${DOTPATH}/etc/init/linux/fedora/prerequisites.sh"
+    if [ -f "$prerequisites" ]; then
+        bash "$prerequisites"
+    else
+        echo "Installing prerequisites..."
+        sudo dnf install -y git make
+    fi
+fi
+
+if is_fedora && ! command -v make > /dev/null 2>&1; then
+    echo "error: make is required but not installed"
+    exit 1
+fi
 
 cd ${DOTPATH} && make install
 cd ${DOTPATH} && make deploy
