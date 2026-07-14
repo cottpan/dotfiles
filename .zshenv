@@ -3,9 +3,14 @@
 export PYENV_ROOT="$ANYENV_ROOT/envs/pyenv"
 export MINT_PATH="$HOME/.mint"
 export MINT_LINK_PATH="$MINT_PATH/bin"
-export CPPFLAGS="-I/opt/homebrew/opt/openjdk@11/include"
-export ANDROID_HOME="$HOME/Library/Android/sdk"
 export BUN_INSTALL="$HOME/.bun"
+
+if [ "$(uname)" = "Darwin" ]; then
+  export CPPFLAGS="-I/opt/homebrew/opt/openjdk@11/include"
+  export ANDROID_HOME="$HOME/Library/Android/sdk"
+elif [ "$(uname)" = "Linux" ]; then
+  export ANDROID_HOME="$HOME/Android/Sdk"
+fi
 
 path=(
     $HOME/.local/bin(N-/)

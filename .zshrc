@@ -1,24 +1,27 @@
-if [ `uname -m` = "arm64" ]; then
+if [ -d /opt/homebrew/opt/zplug ]; then
   export ZPLUG_HOME=/opt/homebrew/opt/zplug
-  source $ZPLUG_HOME/init.zsh
-else
+elif [ -d /usr/local/opt/zplug ]; then
   export ZPLUG_HOME=/usr/local/opt/zplug
+elif [ -d "$HOME/.zplug" ]; then
+  export ZPLUG_HOME="$HOME/.zplug"
+fi
+if [ -n "$ZPLUG_HOME" ] && [ -f "$ZPLUG_HOME/init.zsh" ]; then
   source $ZPLUG_HOME/init.zsh
+
+  # syntax
+  zplug "chrissicool/zsh-256color"
+  zplug "Tarrasch/zsh-colors"
+  # compinit 以降に読み込むようにロードの優先度を変更する
+  zplug "zsh-users/zsh-syntax-highlighting", defer:2
+  zplug "ascii-soup/zsh-url-highlighter"
+
+  # tools
+  zplug "marzocchi/zsh-notify"
+  zplug mafredri/zsh-async, from:github
+  zplug sindresorhus/pure, use:pure.zsh, from:github, as:theme
 fi
 
 chpwd() { ls -lr }
-
-# syntax
-zplug "chrissicool/zsh-256color"
-zplug "Tarrasch/zsh-colors"
-# compinit 以降に読み込むようにロードの優先度を変更する
-zplug "zsh-users/zsh-syntax-highlighting", defer:2
-zplug "ascii-soup/zsh-url-highlighter"
-
-# tools
-zplug "marzocchi/zsh-notify"
-zplug mafredri/zsh-async, from:github
-zplug sindresorhus/pure, use:pure.zsh, from:github, as:theme
 
 # Load custom functions from .zsh/functions directory
 if [ -d "$HOME/.zsh/functions" ]; then
@@ -108,15 +111,17 @@ if [ -f ~/.dircolors ]; then
 fi
 
 # 未インストール項目をインストールする
-if ! zplug check --verbose; then
+if [ -n "$ZPLUG_HOME" ] && command -v zplug > /dev/null 2>&1; then
+  if ! zplug check --verbose; then
     printf "Install? [y/N]: "
     if read -q; then
-        echo; zplug install
+      echo; zplug install
     fi
-fi
+  fi
 
-# コマンドをリンクして、PATH に追加し、プラグインは読み込む
-zplug load
+  # コマンドをリンクして、PATH に追加し、プラグインは読み込む
+  zplug load
+fi
 
 eval "$(mise activate zsh)"
 

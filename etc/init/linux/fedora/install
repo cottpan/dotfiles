@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# エラーがあったらそこで即終了
+set -eo pipefail
+# Prevent commands misbehaving due to locale differences
+export LC_ALL=C
+
+DOTPATH=${DOTPATH:-$HOME/dotfiles}
+
+if [ -n "$CI" ]; then
+    DOTPATH=$RUNNER_WORKSPACE/dotfiles
+fi
+
+# Brewfile.test に対応する Fedora パッケージ
+PACKAGES=(
+    awscli
+    bat
+    colordiff
+    fd-find
+    ffmpeg
+    fzf
+    gh
+    git
+    git-delta
+    jq
+    libjxl
+    libwebp-tools
+    scrcpy
+    yt-dlp
+    zsh
+    java-11-openjdk-devel
+)
+
+echo "Installing packages via dnf..."
+sudo dnf install -y "${PACKAGES[@]}"
+
+# Fedora の fd-find は fdfind コマンド名で提供される
+if ! command -v fd > /dev/null 2>&1 && command -v fdfind > /dev/null 2>&1; then
+    mkdir -p "$HOME/.local/bin"
+    ln -sfn "$(command -v fdfind)" "$HOME/.local/bin/fd"
+fi
+
+# zplug
+if [ ! -d "$HOME/.zplug" ]; then
+    echo "Installing zplug..."
+    git clone https://github.com/zplug/zplug "$HOME/.zplug"
+fi
+
+# mise (.zshrc で使用)
+if ! command -v mise > /dev/null 2>&1; then
+    echo "Installing mise..."
+    curl -fsSL https://mise.run | sh
+fi
+
+mkdir -p "$HOME/.config/git"
+if [ ! -f "$HOME/.config/git/ignore" ]; then
+    touch "$HOME/.config/git/ignore"
+fi

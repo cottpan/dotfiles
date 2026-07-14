@@ -15,6 +15,20 @@ is_macos() {
     test "$(uname)" == "Darwin"
 }
 
+is_linux() {
+    test "$(uname)" == "Linux"
+}
+
+is_fedora() {
+    if [ -f /etc/os-release ]; then
+        # shellcheck disable=SC1091
+        . /etc/os-release
+        test "${ID:-}" == "fedora"
+    else
+        return 1
+    fi
+}
+
 is_arm() { 
     test "$UNAME" == "arm64"
 }
@@ -42,26 +56,37 @@ if [ -n "$CI" ] ; then
     DOTPATH=$RUNNER_WORKSPACE/dotfiles
 fi
 
-if ! is_macos ; then
-    echo "not macOS! Abort."
-    exit 1
-fi
+if is_macos ; then
+    # Rosetta2 でターミナルを動かしている時には強制終了させる
+    if ! is_arm ; then
+        echo "x86 Processor Detected"
+        if is_rosseta2 ; then
+            echo "This script can not exec in Rosetta2 terminal. Abort."
+            exit 1
+        fi
+    else
+        echo "ARM Processor Detected."
+    fi
 
-# Rosetta2 でターミナルを動かしている時には強制終了させる
-if ! is_arm ; then
-    echo "x86 Processor Detected"
-    if is_rosseta2 ; then
-        echo "This script can not exec in Rosetta2 terminal. Abort."
+    if !( xcode-select -p > /dev/null 2>&1 ); then
+        echo "Installing Xcode CLT..."
+        echo "Please re-run after Xcode CLT installation is complete."
+        xcode-select --install
+    fi
+elif is_linux ; then
+    if is_fedora ; then
+        echo "Fedora detected."
+        if ! command -v git > /dev/null 2>&1; then
+            echo "Installing git..."
+            sudo dnf install -y git
+        fi
+    else
+        echo "Unsupported Linux distribution. Abort."
         exit 1
     fi
 else
-    echo "ARM Processor Detected."
-fi
-
-if !( xcode-select -p > /dev/null 2>&1 ); then
-    echo "Installing Xcode CLT..."
-    echo "Please re-run after Xcode CLT installation is complete."
-    xcode-select --install
+    echo "Unsupported OS. Abort."
+    exit 1
 fi
 
 dotfiles_download
