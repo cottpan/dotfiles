@@ -10,7 +10,18 @@ if [ -n "$CI" ]; then
     DOTPATH=$RUNNER_WORKSPACE/dotfiles
 fi
 
-# Brewfile.test に対応する Fedora パッケージ
+fedora_java_devel_package() {
+    local pkg
+    for pkg in java-25-openjdk-devel java-21-openjdk-devel java-17-openjdk-devel java-latest-openjdk-devel; do
+        if dnf repoquery --available -q "$pkg" > /dev/null 2>&1; then
+            echo "$pkg"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Brewfile.test に対応する Fedora パッケージ（標準リポジトリ）
 PACKAGES=(
     awscli
     bat
@@ -25,11 +36,16 @@ PACKAGES=(
     libjxl
     libwebp-tools
     make
-    scrcpy
     yt-dlp
     zsh
-    java-11-openjdk-devel
 )
+
+JAVA_DEVEL=$(fedora_java_devel_package || true)
+if [ -n "$JAVA_DEVEL" ]; then
+    PACKAGES+=("$JAVA_DEVEL")
+else
+    echo "warning: no OpenJDK devel package found in enabled repositories"
+fi
 
 echo "Installing packages via dnf..."
 sudo dnf install -y "${PACKAGES[@]}"
