@@ -1,42 +1,36 @@
 #!/usr/bin/env zsh
 #
-# fprwtree - Git Worktree Creation from Pull Request
+# fprwtree - Pull Request から worktree を fzf で作る
 #
 # Description:
-#   GitHub の Pull Request を fzf で選択して worktree を作成
-#   Fork からの PR にも対応（自動的にリモートを追加）
-#   作成場所: <親ディレクトリ>/<プロジェクト名>.worktree/pr-<番号>-<ブランチ名>
-#
-# Features:
-#   - PR のタイトル、作者、説明をプレビュー表示
-#   - Fork PR の場合は自動的にリモートリポジトリを追加
-#   - ローカルブランチを自動作成（detached HEAD にならない）
-#   - worktree パスのカスタマイズが可能
-#   - VSCode での自動オープンオプション
+#   GitHub の open PR を fzf で選んで worktree を作る。
+#   fork からの PR ならリモートを追加して fetch してから作成する。
+#   作成そのものは wtadd に委譲し、作成後の処理は worktree-hooks が担当する。
+#   既定のパス: <親>/<リポジトリ名>.worktree/pr-<番号>-<ブランチ名>
 #
 # Requirements:
-#   - GitHub CLI (gh) のインストールが必要
+#   - GitHub CLI (gh)
 #
 # Usage:
 #   fprwtree
 #
+# Non-interactive equivalent（fetch 済みなら）:
+#   wtadd feat/pr-branch --base origin/feat/pr-branch --name pr-123-feat/pr-branch --pr 123
+#
 fprwtree() {
-  # Check if gh command is available
   if ! command -v gh &> /dev/null; then
     echo "❌ GitHub CLI (gh) is not installed. Please install it first."
     echo "   brew install gh"
     return 1
   fi
 
-  # Check if we're in a git repository
   if ! git rev-parse --git-dir &> /dev/null; then
     echo "❌ Not in a git repository"
     return 1
   fi
 
-  local prs selected_pr pr_number branch_name worktree_path
+  local prs selected_pr pr_number branch_name wt_path
 
-  # Get PR list with custom format: #number | title | author | head_branch
   echo "🔍 Fetching pull requests..."
   prs=$(gh pr list --state open --limit 50 --json number,title,author,headRefName --template '{{range .}}#{{.number}} | {{.title}} | @{{.author.login}} | {{.headRefName}}{{"\n"}}{{end}}')
 
@@ -45,7 +39,6 @@ fprwtree() {
     return 0
   fi
 
-  # Select PR using fzf
   selected_pr=$(echo "$prs" | fzf \
     --prompt="PRs > " \
     --header="Select a Pull Request to create worktree" \
@@ -61,132 +54,58 @@ Description:
     --border \
     --ansi \
     --delimiter="|" \
-    --with-nth="1,2,3")
+    --with-nth="1,2,3") || return 0
 
-  if [ $? -ne 0 ]; then
+  if [ -z "$selected_pr" ]; then
+    __wt_clear_screen
     return 0
   fi
 
-  if [ -n "$selected_pr" ]; then
-    # Extract PR number and branch name
-    pr_number=$(echo "$selected_pr" | cut -d'|' -f1 | sed 's/^#//' | tr -d ' ')
-    branch_name=$(echo "$selected_pr" | cut -d'|' -f4 | tr -d ' ')
-    
-    # Get current project directory name and parent directory
-    local git_root=$(git rev-parse --show-toplevel)
-    local current_dir=$(basename "$git_root")
-    local parent_dir=$(dirname "$git_root")
-    local worktree_base_dir="${parent_dir}/${current_dir}.worktree"
-    local default_path="${worktree_base_dir}/pr-${pr_number}-${branch_name}"
-    
-    # Ask for worktree path
-    echo "Enter worktree path (default: ${default_path}):"
-    read worktree_path
-    
-    # Use default if empty
-    if [ -z "$worktree_path" ]; then
-      worktree_path="$default_path"
-    fi
+  pr_number=$(echo "$selected_pr" | cut -d'|' -f1 | sed 's/^#//' | tr -d ' ')
+  branch_name=$(echo "$selected_pr" | cut -d'|' -f4 | tr -d ' ')
 
-    # Create worktree base directory if it doesn't exist
-    local worktree_dir=$(dirname "$worktree_path")
-    if [ ! -d "$worktree_dir" ]; then
-      echo "📁 Creating worktree directory: $worktree_dir"
-      mkdir -p "$worktree_dir"
-    fi
+  wt_path=$(__wt_prompt_path "$(__wt_default_path "pr-${pr_number}-${branch_name}")")
 
-    # Get PR details to fetch the branch safely
-    echo "📥 Fetching PR branch..."
-    local pr_details=$(gh pr view "$pr_number" --json isCrossRepository,headRepository,headRefName,headRepositoryOwner --template '{{.isCrossRepository}}:{{.headRepositoryOwner.login}}/{{.headRepository.name}}:{{.headRefName}}')
-    
-    if [ -z "$pr_details" ]; then
-      echo "❌ Failed to get PR details"
-      return 1
-    fi
-    
-    # Parse PR details
-    local is_cross_repo=$(echo "$pr_details" | cut -d':' -f1)
-    local head_repo=$(echo "$pr_details" | cut -d':' -f2)
-    local head_branch=$(echo "$pr_details" | cut -d':' -f3)
-    
-    # Check if PR is from a fork or same repository
-    if [[ "$is_cross_repo" == "true" ]]; then
-      # Fork PR: add remote if it doesn't exist and fetch
-      local remote_name="pr-${pr_number}-remote"
-      local remote_url="https://github.com/${head_repo}.git"
-      
-      if ! git remote get-url "$remote_name" &> /dev/null; then
-        echo "🔗 Adding remote: $remote_name"
-        git remote add "$remote_name" "$remote_url"
-      fi
-      
-      echo "📦 Fetching from fork..."
-      git fetch "$remote_name" "$head_branch"
-      local full_branch_ref="${remote_name}/${head_branch}"
-    else
-      # Same repository PR: fetch the branch
-      echo "📦 Fetching branch..."
-      git fetch origin "$head_branch"
-      local full_branch_ref="origin/${head_branch}"
-    fi
+  # PR の head を取ってくる（fork の場合はリモートを足す）
+  echo "📥 Fetching PR branch..."
+  local pr_details
+  pr_details=$(gh pr view "$pr_number" --json isCrossRepository,headRepository,headRefName,headRepositoryOwner --template '{{.isCrossRepository}}:{{.headRepositoryOwner.login}}/{{.headRepository.name}}:{{.headRefName}}')
 
-    # Create the worktree with a local branch
-    # Check if local branch already exists
-    local local_branch_name="$head_branch"
-    if git show-ref --verify --quiet "refs/heads/$local_branch_name"; then
-      echo "📌 Local branch '$local_branch_name' already exists, using it"
-      git worktree add "$worktree_path" "$local_branch_name"
-    else
-      echo "🌿 Creating local branch '$local_branch_name' from '$full_branch_ref'"
-      git worktree add -b "$local_branch_name" "$worktree_path" "$full_branch_ref"
-    fi
-    
-    if [ $? -eq 0 ]; then
-      echo "✅ Worktree created successfully: $worktree_path"
-      echo "🔗 PR #${pr_number}: $(echo "$selected_pr" | cut -d'|' -f2 | sed 's/^ *//')"
-      
-      # Copy .env and .mise.local.toml files from main repository
-      __worktree_copy_config_files "$git_root" "$worktree_path"
-
-      # Run project-specific setup if applicable
-      __worktree_run_project_setup "$worktree_path" "$current_dir"
-      
-      # Ask if user wants to open with VSCode
-      echo "💻 Open with VSCode? [y/N]:"
-      read -q open_vscode
-      echo ""
-      
-      local should_cd=true
-      if [[ "$open_vscode" == "y" ]]; then
-        if command -v code &> /dev/null; then
-          echo "🚀 Opening VSCode..."
-          code "$worktree_path"
-          should_cd=false
-        else
-          echo "❌ VSCode (code command) not found"
-        fi
-      fi
-      
-      # Navigate to the new worktree only if VSCode was not opened
-      if [[ "$should_cd" == true ]]; then
-        if zle; then
-          # Called from ZLE (keyboard shortcut)
-          BUFFER="cd ${worktree_path}"
-          zle accept-line
-        else
-          # Called directly from command line
-          cd "$worktree_path"
-        fi
-      fi
-    else
-      echo "❌ Failed to create worktree"
-      return 1
-    fi
+  if [ -z "$pr_details" ]; then
+    echo "❌ Failed to get PR details"
+    return 1
   fi
 
-  # Only clear screen if ZLE is active
-  if zle; then
-    zle clear-screen
+  local is_cross_repo=$(echo "$pr_details" | cut -d':' -f1)
+  local head_repo=$(echo "$pr_details" | cut -d':' -f2)
+  local head_branch=$(echo "$pr_details" | cut -d':' -f3)
+  local base_ref
+
+  if [[ "$is_cross_repo" == "true" ]]; then
+    local remote_name="pr-${pr_number}-remote"
+    local remote_url="https://github.com/${head_repo}.git"
+
+    if ! git remote get-url "$remote_name" &> /dev/null; then
+      echo "🔗 Adding remote: $remote_name"
+      git remote add "$remote_name" "$remote_url"
+    fi
+
+    echo "📦 Fetching from fork..."
+    git fetch "$remote_name" "$head_branch" || return 1
+    base_ref="${remote_name}/${head_branch}"
+  else
+    echo "📦 Fetching branch..."
+    git fetch origin "$head_branch" || return 1
+    base_ref="origin/${head_branch}"
   fi
+
+  wtadd --branch "$head_branch" --base "$base_ref" --path "$wt_path" --pr "$pr_number"
+  local rc=$?
+
+  if [ $rc -eq 0 ] || [ $rc -eq 3 ]; then
+    echo "🔗 PR #${pr_number}: $(echo "$selected_pr" | cut -d'|' -f2 | sed 's/^ *//')"
+  fi
+
+  __wt_clear_screen
+  return $rc
 }
-

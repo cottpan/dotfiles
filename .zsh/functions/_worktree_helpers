@@ -1,112 +1,195 @@
 #!/usr/bin/env zsh
 #
-# Shared helpers for worktree creation functions
+# _worktree_helpers - worktree 系コマンドの共有ライブラリ
+#
+# レイヤ分け:
+#
+#   picker  fnewtree / fbrwtree / fprwtree
+#           「何を」作るかを fzf と対話で決めるだけ。git worktree add は呼ばない
+#             ↓ wtadd --branch X --base Y --path Z
+#   core    wtadd
+#           worktree を作るだけ。完全に非対話（プロンプトを一切出さない）
+#             ↓ WT_* を export して hook を source
+#   hooks   ~/.zsh/worktree-hooks/*
+#           作成後の後処理。設定ファイルのコピー / セットアップ / cd など
+#
+# このファイルには picker と core の両方から使う小物だけを置く。
+#
 
-__worktree_config_find_depth=6
+# ログはすべて stderr へ。stdout は `wtadd --print-path` などの機械可読出力に空けておく
+__wt_log() { print -r -- "$@" >&2 }
 
-__worktree_find_config_files() {
-  local git_root="$1"
-  find "$git_root" -maxdepth "$__worktree_config_find_depth" \
-    \( -name ".env*" -o -name ".mise.local.toml" \) -type f 2>/dev/null
+# 「メイン」worktree の root。worktree の中から呼ばれても元のリポジトリを指す
+__wt_main_root() {
+  local common
+  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  print -r -- "${common:h}"
 }
 
-__worktree_copy_config_files() {
-  local git_root="$1"
-  local worktree_path="$2"
-  local config_files
-  config_files=$(__worktree_find_config_files "$git_root")
+# worktree 置き場: <親ディレクトリ>/<リポジトリ名>.worktree
+__wt_base_dir() {
+  local main_root="${1:-$(__wt_main_root)}"
+  [ -n "$main_root" ] || return 1
+  print -r -- "${main_root:h}/${main_root:t}.worktree"
+}
 
-  if [ -z "$config_files" ]; then
+# 既定の worktree パス: <worktree 置き場>/<名前>
+__wt_default_path() {
+  local name="$1" main_root="${2:-$(__wt_main_root)}"
+  [ -n "$name" ] && [ -n "$main_root" ] || return 1
+  print -r -- "$(__wt_base_dir "$main_root")/$name"
+}
+
+# "* feat/x" / "  remotes/origin/feat/x" → ref 部分だけ取り出す
+__wt_strip_marker() { print -r -- "${1##* }" }
+
+# "remotes/origin/feat/x" → "feat/x"
+__wt_local_name() { print -r -- "${1#remotes/*/}" }
+
+# 起点 ref から作るべきローカルブランチ名を求める
+#   remotes/origin/feat/x → feat/x
+#   origin/feat/x         → feat/x （実在するリモート追跡ブランチのときだけ）
+#   develop / v1.2.0      → そのまま
+__wt_branch_from_base() {
+  local ref="$1"
+  if [[ "$ref" == remotes/* ]]; then
+    print -r -- "${ref#remotes/*/}"
     return 0
   fi
+  if [[ "$ref" == */* ]] && git show-ref --verify --quiet "refs/remotes/$ref"; then
+    print -r -- "${ref#*/}"
+    return 0
+  fi
+  print -r -- "$ref"
+}
 
-  echo ""
-  echo "📄 Found config files in main repository:"
-  echo "$config_files" | while read -r config_file; do
-    local rel_path=${config_file#$git_root/}
-    echo "   $rel_path"
+# ZLE から呼ばれているときだけ画面をクリアする
+__wt_clear_screen() { if zle; then zle clear-screen; fi }
+
+# 対話的に聞ける状況か（端末が繋がっているか）
+__wt_interactive() { [ -t 0 ] }
+
+# ---------------------------------------------------------------------------
+# picker 用（対話あり）
+# ---------------------------------------------------------------------------
+
+# ローカル / リモートのブランチを fzf で選ばせて、選択行をそのまま返す
+__wt_pick_branch() {
+  local prompt="${1:-branches > }" header="${2:-Select a branch}"
+  git branch --all | grep -v HEAD | fzf \
+    --prompt="$prompt" \
+    --header="$header" \
+    --preview="echo '📦 Branch info:' && git log --oneline --decorate -10 \$(echo {} | sed 's/.* //' | sed 's#remotes/[^/]*/##')" \
+    --preview-window="right:50%" \
+    --reverse \
+    --border \
+    --ansi
+}
+
+# 既定パスを見せて、空 Enter なら既定を採用する
+__wt_prompt_path() {
+  local default_path="$1" answer
+  __wt_log "📁 Enter worktree path (default: ${default_path}):"
+  read answer
+  print -r -- "${answer:-$default_path}"
+}
+
+# ---------------------------------------------------------------------------
+# hook 機構
+# ---------------------------------------------------------------------------
+#
+# フックは「実行」ではなく「source」する。cd / zle / read を呼ばせたいので、
+# サブプロセスではなく呼び出し元のシェルで動かす必要があるため。
+#
+# 探索順:
+#   1. ${WTREE_HOOKS_DIR:-~/.zsh/worktree-hooks}   グローバル
+#   2. <メインリポジトリ>/.worktree-hooks           リポジトリ固有
+# 実行順は basename の昇順（10-, 20-, ... で並べる）。
+# リポジトリ固有フックは同名のグローバルフックを上書きする。
+#
+# 無視されるファイル: `_` 始まり / `.` 始まり / `*.disabled`
+#
+
+# 実行対象のフックを 1 行 1 件で出力する
+__wt_collect_hooks() {
+  local __wt_hk_root="$1"
+  local -a __wt_hk_dirs
+  local -A __wt_hk_map
+  local __wt_hk_dir __wt_hk_file __wt_hk_name
+
+  __wt_hk_dirs=( "${WTREE_HOOKS_DIR:-$HOME/.zsh/worktree-hooks}" )
+  [ -n "$__wt_hk_root" ] && __wt_hk_dirs+=( "$__wt_hk_root/.worktree-hooks" )
+
+  for __wt_hk_dir in "${__wt_hk_dirs[@]}"; do
+    [ -d "$__wt_hk_dir" ] || continue
+    for __wt_hk_file in "$__wt_hk_dir"/*(N-.); do
+      __wt_hk_name="${__wt_hk_file:t}"
+      [[ "$__wt_hk_name" == _* || "$__wt_hk_name" == .* || "$__wt_hk_name" == *.disabled ]] && continue
+      __wt_hk_map[$__wt_hk_name]="$__wt_hk_file"
+    done
   done
-  echo ""
-  echo "📋 Copy config files to new worktree? [y/N]:"
-  read -q copy_config
-  echo ""
 
-  if [[ "$copy_config" != "y" ]]; then
-    echo "⏭️  Skipped copying config files"
-    return 0
-  fi
-
-  echo "$config_files" | while read -r config_file; do
-    local rel_path=${config_file#$git_root/}
-    local target_file="$worktree_path/$rel_path"
-    local target_dir
-    target_dir=$(dirname "$target_file")
-
-    if [ ! -d "$target_dir" ]; then
-      mkdir -p "$target_dir"
-    fi
-
-    if cp "$config_file" "$target_file"; then
-      echo "   ✅ Copied: $rel_path"
-    else
-      echo "   ❌ Failed to copy: $rel_path"
-    fi
+  for __wt_hk_name in ${(ko)__wt_hk_map}; do
+    print -r -- "${__wt_hk_map[$__wt_hk_name]}"
   done
 }
 
-__worktree_run_project_setup() {
-  local worktree_path="$1"
-  local project_name="$2"
-  local setup_dir setup_cmd
+# フック名がトークン群のいずれかに一致するか（数字プレフィックス有無どちらでも可）
+__wt_hook_matches() {
+  local __wt_hk_name="$1"; shift
+  local __wt_hk_short="$__wt_hk_name" __wt_hk_token
+  [[ "$__wt_hk_name" == <->-* ]] && __wt_hk_short="${__wt_hk_name#*-}"
+  for __wt_hk_token in "$@"; do
+    [[ "$__wt_hk_name" == "$__wt_hk_token" || "$__wt_hk_short" == "$__wt_hk_token" ]] && return 0
+  done
+  return 1
+}
 
-  case "$project_name" in
-    dresscode-backend)
-      setup_dir="$worktree_path/v2"
-      setup_cmd=(make refresh)
-      ;;
-    dresscode-frontend)
-      setup_dir="$worktree_path"
-      setup_cmd=(pnpm i)
-      ;;
-    *)
-      return 0
-      ;;
-  esac
+# フックを順に source する。WT_* は呼び出し側（wtadd）が export しておくこと
+#   $1: メインリポジトリの root
+#   $2: 実行するフック名のカンマ区切り（空なら全部）
+__wt_run_hooks() {
+  local __wt_hk_root="$1" __wt_hk_only="$2"
+  local -a __wt_hk_list __wt_hk_only_list __wt_hk_skip_list __wt_hk_failed
+  local __wt_hk_file __wt_hk_name
 
-  if [ ! -d "$setup_dir" ]; then
-    echo "⚠️  Setup directory not found: $setup_dir"
+  __wt_hk_list=( "${(@f)$(__wt_collect_hooks "$__wt_hk_root")}" )
+  __wt_hk_list=( ${__wt_hk_list:#} )
+  [ ${#__wt_hk_list} -gt 0 ] || return 0
+
+  [ -n "$__wt_hk_only" ] && __wt_hk_only_list=( ${(s:,:)__wt_hk_only} )
+  [ -n "$WTREE_HOOKS_SKIP" ] && __wt_hk_skip_list=( ${(s:,:)WTREE_HOOKS_SKIP} )
+
+  unset WT_STOP_HOOKS
+
+  for __wt_hk_file in "${__wt_hk_list[@]}"; do
+    __wt_hk_name="${__wt_hk_file:t}"
+
+    if [ ${#__wt_hk_only_list} -gt 0 ] && ! __wt_hook_matches "$__wt_hk_name" "${__wt_hk_only_list[@]}"; then
+      continue
+    fi
+    if [ ${#__wt_hk_skip_list} -gt 0 ] && __wt_hook_matches "$__wt_hk_name" "${__wt_hk_skip_list[@]}"; then
+      __wt_log "⏭️  hook skipped: $__wt_hk_name"
+      continue
+    fi
+
+    __wt_log ""
+    __wt_log "🪝 hook: $__wt_hk_name"
+    if ! source "$__wt_hk_file"; then
+      __wt_hk_failed+=( "$__wt_hk_name" )
+      __wt_log "❌ hook failed: $__wt_hk_name"
+    fi
+
+    if [ -n "$WT_STOP_HOOKS" ]; then
+      __wt_log "⏹️  hook chain stopped by $__wt_hk_name"
+      break
+    fi
+  done
+
+  if [ ${#__wt_hk_failed} -gt 0 ]; then
+    __wt_log ""
+    __wt_log "⚠️  ${#__wt_hk_failed} hook(s) failed: ${__wt_hk_failed[*]}"
     return 1
   fi
-
-  local setup_rel="."
-  if [[ "$setup_dir" != "$worktree_path" ]]; then
-    setup_rel="${setup_dir#$worktree_path/}"
-  fi
-
-  echo ""
-  echo "🔧 Run '${setup_cmd[*]}' in ${setup_rel}? [y/N]:"
-  read -q run_setup
-  echo ""
-
-  if [[ "$run_setup" != "y" ]]; then
-    echo "⏭️  Skipped project setup"
-    return 0
-  fi
-
-  echo "Use mise exec? [y/N]:"
-  read -q use_mise
-  echo ""
-
-  local cmd=( "${setup_cmd[@]}" )
-  if [[ "$use_mise" == "y" ]]; then
-    cmd=(mise exec -- "${setup_cmd[@]}")
-  fi
-
-  echo "🚀 Running: (cd ${setup_rel} && ${cmd[*]})"
-  if (cd "$setup_dir" && "${cmd[@]}"); then
-    echo "✅ Project setup completed"
-  else
-    echo "❌ Project setup failed"
-    return 1
-  fi
+  return 0
 }

@@ -16,6 +16,8 @@
 !/.zsh/dircolors
 !/.zsh/functions/
 !/.zsh/functions/**
+!/.zsh/worktree-hooks/
+!/.zsh/worktree-hooks/**
 !/.zsh/rc/
 !/.zsh/rc/**
 !/.zsh/zkbd/

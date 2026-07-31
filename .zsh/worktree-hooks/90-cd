@@ -1,0 +1,32 @@
+#!/usr/bin/env zsh
+#
+# worktree hook: 作成した worktree に移動する
+#
+# WTREE_NO_CD=1 で無効化できる。
+#
+# フックは「実行」ではなく source されるので、ここでの cd は呼び出し元のシェルに効く。
+#
+
+if [ -n "$WTREE_NO_CD" ]; then
+  return 0
+fi
+
+# スクリプト経由（bin/wtadd など）では cd してもプロセス終了で消えるので何もしない
+if ! __wt_interactive; then
+  return 0
+fi
+
+if [ ! -d "$WT_PATH" ]; then
+  print -u2 "❌ Worktree path not found: $WT_PATH"
+  return 1
+fi
+
+if zle; then
+  # ZLE ウィジェット（キーバインド）から呼ばれた場合
+  BUFFER="cd ${WT_PATH}"
+  zle accept-line
+else
+  cd "$WT_PATH"
+fi
+
+return 0
