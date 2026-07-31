@@ -1,0 +1,71 @@
+# worktree 作成後フック
+
+`wtadd`（と、それを呼ぶ `fnewtree` / `fbrwtree` / `fprwtree`）が worktree を作ったあと、
+このディレクトリのファイルを **basename の昇順で source** する。
+
+`cd` や `zle`、`read` を使わせたいので、実行（サブプロセス）ではなく source している。
+つまりフックは呼び出し元のシェルをそのまま触れる。
+
+## 置き場所
+
+| 優先度 | パス | 用途 |
+| --- | --- | --- |
+| 1 | `${WTREE_HOOKS_DIR:-~/.zsh/worktree-hooks}` | 全リポジトリ共通 |
+| 2 | `<メインリポジトリ>/.worktree-hooks` | そのリポジトリだけ |
+
+同名ファイルがあればリポジトリ固有のほうが勝つ。
+たとえば `dresscode-backend/.worktree-hooks/20-project-setup` を置けば、
+グローバルの `20-project-setup` を差し替えられる。
+
+## 無視されるファイル
+
+- `_` 始まり
+- `.` 始まり
+- `*.disabled`（このファイルもそれ。止めたいフックはリネームで無効化する）
+
+## フックに渡ってくる変数
+
+| 変数 | 中身 |
+| --- | --- |
+| `WT_PATH` | 作成された worktree の絶対パス |
+| `WT_BRANCH` | ブランチ名（`--detach` のときは空） |
+| `WT_BASE` | 起点 ref（指定がなければ空） |
+| `WT_REPO_ROOT` | メインリポジトリの root（worktree の中から作っても常にメイン） |
+| `WT_REPO_NAME` | メインリポジトリのディレクトリ名 |
+| `WT_SOURCE` | `new` / `branch` / `pr` / `manual` |
+| `WT_PR_NUMBER` | PR から作った場合の番号 |
+
+フック側で `WT_STOP_HOOKS=1` を立てると、以降のフックを実行せずに打ち切る。
+
+## 書き方の約束
+
+- **確認プロンプトを出さない。** 既定で全部やる。要らないケースは呼ぶ側が
+  `--no-hooks` / `--hooks-only` / `WTREE_HOOKS_SKIP` で外す。
+  これは Claude Code などの非対話から同じ挙動で呼べるようにするため。
+  端末の有無で分岐したいときは `__wt_interactive` を使う（`90-cd` がその例）。
+- ログは `print -u2` か `__wt_log` で **stderr** に出す。stdout は `wtadd --print-path` 用。
+- 最後は必ず `return 0`。source の戻り値は最後のコマンドの終了ステータスなので、
+  条件分岐で終わると意図せず「失敗」扱いになる。
+- ローカル変数は好きな名前でよいが、`__wt_hk_*` だけは runner が使っているので避ける。
+
+## 制御
+
+```sh
+wtadd feat/x --base main --no-hooks              # フックを全部止める
+wtadd feat/x --base main --hooks-only copy-config,cd
+wtadd --list-hooks                               # 実行されるフックを確認
+WTREE_HOOKS_SKIP=project-setup fnewtree          # 特定のフックだけ飛ばす
+```
+
+`--hooks-only` / `WTREE_HOOKS_SKIP` は数字プレフィックスあり・なしのどちらでも書ける
+（`20-project-setup` でも `project-setup` でもよい）。
+
+## git ネイティブの post-checkout hook との違い
+
+`git worktree add` は（`--no-checkout` でなければ）`post-checkout` hook を
+第 1 引数 null-ref で呼ぶので、git だけでも後処理はできる。
+ただし `post-checkout` は通常の `git checkout` / `git switch` でも走るうえ、
+サブプロセスなので呼び出し元シェルの `cd` はできない。
+「作成直後に cd したい」のはシェル側の仕事なので、こちらで持っている。
+リポジトリの状態そのものを整える処理（`git config` の設定など）は
+`post-checkout` に置いたほうが、`git worktree add` を直接叩いたときも効いて筋がよい。

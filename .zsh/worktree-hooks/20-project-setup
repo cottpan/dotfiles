@@ -1,0 +1,63 @@
+#!/usr/bin/env zsh
+#
+# worktree hook: リポジトリごとの初回セットアップコマンドを流す
+#
+# 確認は取らずに常に実行する。時間はかかるが、やらないと worktree が使えないため。
+# 飛ばしたいときは:
+#   wtadd ... --no-hooks / --hooks-only copy-config / WTREE_HOOKS_SKIP=project-setup
+#
+# mise は非対話シェルで activate されないので、mise があれば mise exec で包む。
+# 明示したいときは WTREE_SETUP_USE_MISE=y / =n。
+#
+# 対応リポジトリを増やすときは下のテーブルに 1 行足す。
+#   <リポジトリ名>|<worktree root からの相対ディレクトリ>|<コマンド>
+#
+
+local -a setup_table
+setup_table=(
+  'dresscode-backend|v2|make refresh'
+  'dresscode-frontend|.|pnpm i'
+)
+
+local entry setup_rel="" setup_cmd_str=""
+for entry in "${setup_table[@]}"; do
+  if [[ "${entry%%|*}" == "$WT_REPO_NAME" ]]; then
+    local rest="${entry#*|}"
+    setup_rel="${rest%%|*}"
+    setup_cmd_str="${rest#*|}"
+    break
+  fi
+done
+
+if [ -z "$setup_cmd_str" ]; then
+  print -u2 "   $WT_REPO_NAME はセットアップ対象外"
+  return 0
+fi
+
+local setup_dir="$WT_PATH"
+[[ "$setup_rel" != "." ]] && setup_dir="$WT_PATH/$setup_rel"
+
+if [ ! -d "$setup_dir" ]; then
+  print -u2 "⚠️  Setup directory not found: $setup_dir"
+  return 1
+fi
+
+local -a setup_cmd cmd
+setup_cmd=( ${=setup_cmd_str} )
+
+local use_mise="${WTREE_SETUP_USE_MISE:-}"
+if [ -z "$use_mise" ]; then
+  command -v mise &> /dev/null && use_mise=y || use_mise=n
+fi
+
+cmd=( "${setup_cmd[@]}" )
+[[ "$use_mise" == "y" ]] && cmd=( mise exec -- "${setup_cmd[@]}" )
+
+print -u2 "🚀 Running: (cd ${setup_rel} && ${cmd[*]})"
+if (cd "$setup_dir" && "${cmd[@]}" >&2); then
+  print -u2 "✅ Project setup completed"
+  return 0
+fi
+
+print -u2 "❌ Project setup failed"
+return 1

@@ -1,0 +1,31 @@
+#!/usr/bin/env zsh
+#
+# wtadd - worktree を作る CLI（スクリプト / Claude Code などの非対話用）
+#
+# 対話シェルでは同名の zsh 関数（~/.zsh/functions/wtadd）が優先される。
+# .zshrc は非対話シェルでは読まれないので、そこから呼べないケースのためにこのラッパを置く。
+#
+# 挙動は fnewtree などから呼んだときと同じ（設定ファイルのコピーもセットアップも走る）。
+# 違いは 90-cd だけで、子プロセスの cd は残らないので何もしない。
+#
+# 作った worktree のパスを受け取りたいときは --print-path を使う。
+#
+# Usage:
+#   wtadd <branch> --base <ref> [options]
+#   wtadd --help
+#
+set -e
+
+WTREE_FUNC_DIR="${WTREE_FUNC_DIR:-$HOME/.zsh/functions}"
+
+if [ ! -r "$WTREE_FUNC_DIR/_worktree_helpers" ] || [ ! -r "$WTREE_FUNC_DIR/wtadd" ]; then
+  print -u2 "❌ worktree functions not found in: $WTREE_FUNC_DIR"
+  exit 1
+fi
+
+source "$WTREE_FUNC_DIR/_worktree_helpers"
+source "$WTREE_FUNC_DIR/wtadd"
+
+set +e
+wtadd "$@"
+exit $?

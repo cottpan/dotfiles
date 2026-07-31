@@ -1,0 +1,39 @@
+#!/usr/bin/env zsh
+#
+# worktree hook: メインリポジトリの .env* / .mise.local.toml を新しい worktree にコピーする
+#
+# git 管理外なので worktree には付いてこないが、無いと pnpm / mise が動かない類のファイル。
+# 確認は取らずに常にコピーする。要らないときは:
+#   wtadd ... --no-hooks / WTREE_HOOKS_SKIP=copy-config
+#
+
+local depth="${WTREE_CONFIG_FIND_DEPTH:-6}"
+local -a config_files
+
+config_files=( ${(f)"$(
+  find "$WT_REPO_ROOT" -maxdepth "$depth" \
+    \( -name node_modules -o -name .git -o -name dist -o -name .next -o -name .turbo \) -prune \
+    -o \( -name ".env*" -o -name ".mise.local.toml" \) -type f -print 2>/dev/null
+)"} )
+config_files=( ${config_files:#} )
+
+if [ ${#config_files} -eq 0 ]; then
+  print -u2 "   コピー対象の設定ファイルなし"
+  return 0
+fi
+
+local f rel target failed=0
+for f in "${config_files[@]}"; do
+  rel="${f#$WT_REPO_ROOT/}"
+  target="$WT_PATH/$rel"
+  mkdir -p "${target:h}"
+  if cp "$f" "$target"; then
+    print -u2 "   ✅ Copied: $rel"
+  else
+    print -u2 "   ❌ Failed to copy: $rel"
+    failed=1
+  fi
+done
+
+[ $failed -eq 0 ] || return 1
+return 0

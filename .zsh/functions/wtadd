@@ -1,0 +1,213 @@
+#!/usr/bin/env zsh
+#
+# wtadd - worktree を作る（fzf なし・完全に非対話）
+#
+# Description:
+#   git worktree add をラップして「パスの決定」「ブランチの有無の判定」「作成後フック」
+#   だけを面倒みるコマンド。何を作るかを選ぶ UI は持たない。
+#   fzf で選びたいときは fnewtree / fbrwtree / fprwtree から呼ばれる。
+#
+# Usage:
+#   wtadd <branch> [--base <ref>] [options]
+#   wtadd --branch <name> --base <ref> [options]
+#
+# Options:
+#   -b, --branch <name>   作成 / 使用するブランチ名（位置引数でも可）
+#                         既に存在するローカルブランチならそれを checkout する
+#                         存在しなければ --base から新規作成する
+#       --base <ref>      新規ブランチの起点。省略時は HEAD
+#                         origin/foo のようなリモート ref も可
+#   -p, --path <path>     worktree のパス
+#                         省略時は <親>/<リポジトリ名>.worktree/<branch>
+#       --name <dirname>  パス末尾のディレクトリ名だけ差し替える（pr-123-foo など）
+#       --detach          ブランチを作らず detached HEAD で作る
+#       --source <kind>   フックに渡す文脈（new / branch / pr / manual）
+#       --pr <number>     フックに渡す PR 番号（--source pr になる）
+#       --no-hooks        作成後フックを実行しない
+#       --hooks-only <a,b> 指定したフックだけ実行する
+#       --list-hooks      実行されるフックの一覧を出して終了
+#       --print-path      作成した worktree のパスを stdout に出す
+#       --dry-run         実際には作らず、実行する git コマンドだけ表示する
+#   -h, --help
+#
+# Exit status:
+#   0  成功
+#   1  worktree の作成に失敗
+#   2  引数エラー
+#   3  worktree は作れたが、フックのどれかが失敗した
+#
+# Examples:
+#   wtadd feat/new-thing --base origin/develop
+#   wtadd hotfix/x --base main --path ~/tmp/hotfix-x
+#   wtadd --branch feat/x --base origin/develop --no-hooks --print-path
+#
+__wtadd_usage() {
+  __wt_log "Usage: wtadd <branch> [--base <ref>] [--path <path>] [--name <dirname>]"
+  __wt_log "             [--detach] [--source <kind>] [--pr <number>]"
+  __wt_log "             [--no-hooks | --hooks-only <a,b>] [--list-hooks]"
+  __wt_log "             [--print-path] [--dry-run]"
+}
+
+wtadd() {
+  local branch="" base="" wt_path="" dir_name=""
+  local source_kind="manual" pr_number="" hooks_only=""
+  local run_hooks=1 print_path=0 dry_run=0 detach=0 list_hooks=0
+
+  while [ $# -gt 0 ]; do
+    # 値を取るオプションの引数不足をまとめて弾く
+    case "$1" in
+      -b|--branch|--base|-p|--path|--name|--source|--pr|--hooks-only)
+        if [ $# -lt 2 ]; then
+          __wt_log "❌ $1 requires a value"
+          return 2
+        fi
+        ;;
+    esac
+
+    case "$1" in
+      -b|--branch)   branch="$2"; shift 2 ;;
+      --base)        base="$2"; shift 2 ;;
+      -p|--path)     wt_path="$2"; shift 2 ;;
+      --name)        dir_name="$2"; shift 2 ;;
+      --source)      source_kind="$2"; shift 2 ;;
+      --pr)          pr_number="$2"; source_kind="pr"; shift 2 ;;
+      --hooks-only)  hooks_only="$2"; shift 2 ;;
+      --detach)      detach=1; shift ;;
+      --no-hooks)    run_hooks=0; shift ;;
+      --list-hooks)  list_hooks=1; shift ;;
+      --print-path)  print_path=1; shift ;;
+      --dry-run)     dry_run=1; shift ;;
+      -h|--help)     __wtadd_usage; return 0 ;;
+      --)            shift; break ;;
+      -*)            __wt_log "❌ Unknown option: $1"; __wtadd_usage; return 2 ;;
+      *)
+        if [ -z "$branch" ]; then
+          branch="$1"; shift
+        else
+          __wt_log "❌ Unexpected argument: $1"
+          __wtadd_usage
+          return 2
+        fi
+        ;;
+    esac
+  done
+
+  if ! git rev-parse --git-dir &> /dev/null; then
+    __wt_log "❌ Not in a git repository"
+    return 1
+  fi
+
+  # worktree の中から呼ばれても、常にメインリポジトリを基準にする
+  local main_root
+  main_root=$(__wt_main_root)
+  if [ -z "$main_root" ]; then
+    __wt_log "❌ Failed to resolve the main repository root"
+    return 1
+  fi
+  local repo_name="${main_root:t}"
+
+  if [ $list_hooks -eq 1 ]; then
+    local hook_file
+    for hook_file in ${(f)"$(__wt_collect_hooks "$main_root")"}; do
+      [ -n "$hook_file" ] && print -r -- "$hook_file"
+    done
+    return 0
+  fi
+
+  # --base だけ渡された場合はそこからブランチ名を推測する
+  if [ -z "$branch" ] && [ -n "$base" ] && [ $detach -eq 0 ]; then
+    branch=$(__wt_branch_from_base "$(__wt_strip_marker "$base")")
+  fi
+
+  if [ $detach -eq 0 ] && [ -z "$branch" ]; then
+    __wt_log "❌ branch name is required (pass it positionally or with --branch)"
+    __wtadd_usage
+    return 2
+  fi
+
+  # パスの決定
+  if [ -z "$wt_path" ]; then
+    local leaf="${dir_name:-$branch}"
+    if [ -z "$leaf" ]; then
+      leaf="detached-$(git rev-parse --short "${base:-HEAD}" 2>/dev/null)"
+    fi
+    wt_path=$(__wt_default_path "$leaf" "$main_root") || {
+      __wt_log "❌ Failed to resolve the default worktree path"
+      return 1
+    }
+  fi
+
+  if [ -e "$wt_path" ]; then
+    __wt_log "❌ Path already exists: $wt_path"
+    return 1
+  fi
+
+  # git コマンドの組み立て
+  local -a git_cmd
+  local branch_mode
+  if [ $detach -eq 1 ]; then
+    branch_mode="detached"
+    git_cmd=(git worktree add --detach "$wt_path" "${base:-HEAD}")
+  elif git show-ref --verify --quiet "refs/heads/$branch"; then
+    branch_mode="existing"
+    if [ -n "$base" ]; then
+      __wt_log "ℹ️  Local branch '$branch' already exists — ignoring --base '$base'"
+    fi
+    git_cmd=(git worktree add "$wt_path" "$branch")
+  else
+    branch_mode="new"
+    git_cmd=(git worktree add -b "$branch" "$wt_path" "${base:-HEAD}")
+  fi
+
+  if [ $dry_run -eq 1 ]; then
+    __wt_log "🔎 dry-run"
+    __wt_log "   repo:   $main_root"
+    __wt_log "   branch: ${branch:-(detached)} ($branch_mode)"
+    __wt_log "   base:   ${base:-HEAD}"
+    __wt_log "   path:   $wt_path"
+    __wt_log "   cmd:    ${git_cmd[*]}"
+    [ $print_path -eq 1 ] && print -r -- "$wt_path"
+    return 0
+  fi
+
+  local parent_dir="${wt_path:h}"
+  if [ ! -d "$parent_dir" ]; then
+    __wt_log "📁 Creating worktree directory: $parent_dir"
+    mkdir -p "$parent_dir" || return 1
+  fi
+
+  case "$branch_mode" in
+    new)      __wt_log "🌿 Creating branch '$branch' from '${base:-HEAD}'" ;;
+    existing) __wt_log "📌 Using existing local branch '$branch'" ;;
+    detached) __wt_log "🔗 Creating detached worktree at '${base:-HEAD}'" ;;
+  esac
+  __wt_log "📦 Creating worktree at: $wt_path"
+
+  if ! "${git_cmd[@]}" >&2; then
+    __wt_log "❌ Failed to create worktree"
+    return 1
+  fi
+
+  __wt_log "✅ Worktree created: $wt_path"
+  [ $print_path -eq 1 ] && print -r -- "$wt_path"
+
+  [ $run_hooks -eq 1 ] || return 0
+
+  # フックに渡すコンテキスト
+  export WT_PATH="$wt_path"
+  export WT_BRANCH="$branch"
+  export WT_BASE="$base"
+  export WT_REPO_ROOT="$main_root"
+  export WT_REPO_NAME="$repo_name"
+  export WT_SOURCE="$source_kind"
+  export WT_PR_NUMBER="$pr_number"
+
+  __wt_run_hooks "$main_root" "$hooks_only"
+  local hook_rc=$?
+
+  unset WT_PATH WT_BRANCH WT_BASE WT_REPO_ROOT WT_REPO_NAME \
+        WT_SOURCE WT_PR_NUMBER WT_STOP_HOOKS
+
+  [ $hook_rc -eq 0 ] || return 3
+  return 0
+}
