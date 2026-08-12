@@ -6,14 +6,14 @@ set -euo pipefail
 # Prevent commands misbehaving due to locale differences
 export LC_ALL=C
 
-if !(type "brew" > /dev/null 2>&1); then
+if ! type "brew" > /dev/null 2>&1; then
     echo "install Homebrew..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 else
     echo "already installed: Homebrew"
 fi
 
-if !(type "git" > /dev/null 2>&1); then
+if ! type "git" > /dev/null 2>&1; then
     echo "install git..."
     brew install git
 else
@@ -37,7 +37,7 @@ dotfiles_download() {
 }
 dotfiles_download
 
-cd ${DOTPATH} && make install
+cd "${DOTPATH}" && make install
 
 brewfile_path=~/.Brewfile
 if [ -e $brewfile_path ]; then

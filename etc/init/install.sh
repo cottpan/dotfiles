@@ -31,11 +31,15 @@ fi
 
 if is_macos ; then
     echo "macOS detected. Calling macOS install scripts..."
-    source ${DOTPATH}/etc/init/osx/install
-    source ${DOTPATH}/etc/init/osx/change_defaults.sh
+    source "${DOTPATH}/etc/init/osx/install"
+    # 使い捨ての CI ランナーで macOS の環境設定を書き換えても意味が無く、
+    # sudo nvram が失敗して全体が止まることもあるので CI では飛ばす
+    if [ -z "${CI:-}" ] ; then
+        source "${DOTPATH}/etc/init/osx/change_defaults.sh"
+    fi
 elif is_linux && is_fedora ; then
     echo "Fedora detected. Calling Fedora install scripts..."
-    source ${DOTPATH}/etc/init/linux/fedora/install
+    source "${DOTPATH}/etc/init/linux/fedora/install"
 else
     echo "Unsupported OS. Skipping OS-specific package installation."
 fi

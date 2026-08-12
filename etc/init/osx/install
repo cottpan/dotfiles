@@ -5,7 +5,7 @@ set -eo pipefail
 export LC_ALL=C
 
 # アーキテクチャ名は UNAME に入れておく
-UNAME=`uname -m`
+UNAME=$(uname -m)
 
 # dotfiles の場所を設定
 DOTPATH=$HOME/dotfiles
@@ -32,7 +32,7 @@ if ! is_arm ; then
 fi
 
 # install homebrew
-if !( command -v brew > /dev/null 2>&1 ); then
+if ! command -v brew > /dev/null 2>&1; then
     echo "Installing homebrew..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
@@ -43,12 +43,12 @@ else
     HOMEBREW_BIN_PATH="/usr/local/bin"
 fi
 
-cp ${DOTPATH}/Brewfile.test $HOME/.Brewfile
-${HOMEBREW_BIN_PATH}/brew bundle --global --verbose
+cp "${DOTPATH}/Brewfile.test" "$HOME/.Brewfile"
+"${HOMEBREW_BIN_PATH}/brew" bundle --global --verbose
 
-mkdir -p $HOME/.config/git
-touch $HOME/.config/git/ignore
-echo ".DS_Store" > $HOME/.config/git/ignore
+mkdir -p "$HOME/.config/git"
+touch "$HOME/.config/git/ignore"
+echo ".DS_Store" > "$HOME/.config/git/ignore"
 
 # sourceを実行する前にanyenv呼ぶとエラーになる
 # if !( command -v anyenv > /dev/null 2>&1 ); then
