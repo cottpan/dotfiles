@@ -1,0 +1,48 @@
+#!/usr/bin/env sh
+# tmux の設定ファイルを監視して、保存されたら自動で読み直す。
+# .tmux.conf から `run-shell -b` で起動される。entr が無い環境では何もしない。
+#
+# tmux-autoreload プラグインの代替。あちらは declare -g (bash 4.2+) と
+# realpath -e (GNU coreutils) を使っていて macOS の標準環境では動かない。
+
+set -eu
+
+command -v entr > /dev/null 2>&1 || exit 0
+command -v tmux > /dev/null 2>&1 || exit 0
+
+config="${1:-$HOME/.tmux.conf}"
+[ -f "$config" ] || exit 0
+
+# 監視対象はシンボリックリンクの実体にする
+# (dotfiles は ~/.tmux.conf -> ~/dotfiles/.tmux.conf の構成なので、
+#  リンク側を見ているとエディタの保存を取りこぼす)
+resolve_symlink() {
+    path=$1
+    while [ -L "$path" ]; do
+        target=$(readlink "$path")
+        case $target in
+            /*) path=$target ;;
+            *) path=$(dirname "$path")/$target ;;
+        esac
+    done
+    printf '%s\n' "$path"
+}
+
+watched=$(resolve_symlink "$config")
+
+# 設定を読み直すたびにこのスクリプトが起動されるので、二重起動を防ぐ
+pidfile="${TMPDIR:-/tmp}/tmux-watch-config.$(id -u).pid"
+if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile" 2> /dev/null)" 2> /dev/null; then
+    exit 0
+fi
+echo $$ > "$pidfile"
+trap 'rm -f "$pidfile"' EXIT INT TERM
+
+# entr は監視中のファイルが置き換えられると終了するので、ループで張り直す
+# (-n: 非対話モード。tmux から起動されるので端末が無い)
+while [ -f "$watched" ]; do
+    printf '%s\n' "$watched" | entr -n -d -p \
+        tmux source-file "$config" \; display-message "sourced $config" \
+        > /dev/null 2>&1 || true
+    sleep 1
+done
