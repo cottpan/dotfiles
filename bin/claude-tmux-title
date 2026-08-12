@@ -117,6 +117,18 @@ def worker(pane, cwd):
     return 0
 
 
+def set_state(pane, state):
+    """ウィンドウに Claude の稼働状態を持たせる。
+
+    ステータスバー側は window-status-format の条件式でこれを見てインジケータを出す。
+    ウィンドウ名を書き換えないので、状態が変わってもタブの文字は動かない。
+    """
+    if state:
+        tmux("set-option", "-w", "-t", pane, "@claude_state", state)
+    else:
+        tmux("set-option", "-uw", "-t", pane, "@claude_state")
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--worker":
         return worker(sys.argv[2], sys.argv[3])
@@ -133,6 +145,17 @@ def main():
         payload = json.load(sys.stdin)
     except (ValueError, OSError):
         return 0
+
+    event = payload.get("hook_event_name") or "UserPromptSubmit"
+    if event in ("Stop", "StopFailure"):
+        set_state(pane, "idle")
+        return 0
+    if event in ("SessionEnd",):
+        set_state(pane, None)
+        return 0
+
+    # 以降は UserPromptSubmit
+    set_state(pane, "busy")
 
     prompt = (payload.get("prompt") or "").strip()
     session_id = payload.get("session_id") or ""
