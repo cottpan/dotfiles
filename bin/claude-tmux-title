@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""Claude Code のセッション最初のプロンプトから tmux のウィンドウ名を付ける。
+
+Claude Code の UserPromptSubmit フックとして呼ばれる。フックの stdout は
+Claude のコンテキストに注入されるので、このスクリプトは何も出力しない。
+
+要約は安価なモデルに投げるため数秒かかる。プロンプトの入力を待たせないよう、
+本体はすぐ終了し、要約とリネームは切り離した子プロセスで行う。
+
+ウィンドウ名の形式は tmux のオプションで変えられる:
+
+    set -g @claude-title-format title   タイトルのみ (既定)
+    set -g @claude-title-format dir     ディレクトリ名/タイトル
+"""
+
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import unicodedata
+from pathlib import Path
+
+CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "claude-tmux-title"
+MODEL = os.environ.get("CLAUDE_TMUX_TITLE_MODEL", "haiku")
+TITLE_COLUMNS = 20
+
+INSTRUCTION = (
+    "次のユーザー依頼を、日本語で最大10文字の端的なタイトルにしてください。"
+    "タイトルだけを出力し、記号・引用符・句点は付けないでください。\n\n依頼: "
+)
+
+
+def display_width(text):
+    return sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in text)
+
+
+def truncate(text, columns):
+    if display_width(text) <= columns:
+        return text
+    out = ""
+    width = 0
+    for char in text:
+        char_width = 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+        if width + char_width > columns - 1:
+            break
+        out += char
+        width += char_width
+    return out + "…"
+
+
+def tmux(*args):
+    try:
+        proc = subprocess.run(
+            ["tmux", *args], capture_output=True, text=True, timeout=10, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def sanitize(text):
+    """tmux のウィンドウ名として使える形にする。
+
+    ':' と '.' はウィンドウ・ペインのターゲット指定に使われる文字で、
+    含まれていると rename-window が invalid window name で失敗する。
+    """
+    text = re.sub(r"[.:]+", "-", text)
+    return re.sub(r"-{2,}", "-", text).strip("- ")
+
+
+def clean(title):
+    """モデルの返答から余計なものを落とす。"""
+    title = title.strip().splitlines()[0] if title.strip() else ""
+    return title.strip().strip("\"'「」『』 　").rstrip("。.")
+
+
+def worker(pane, cwd):
+    """要約してウィンドウ名を付ける。切り離された子プロセスとして動く。"""
+    prompt = sys.stdin.read().strip()
+    if not prompt:
+        return 0
+
+    title = ""
+    env = dict(os.environ, CLAUDE_TMUX_TITLE_SKIP="1")
+    try:
+        proc = subprocess.run(
+            ["claude", "-p", "--model", MODEL, INSTRUCTION + prompt],
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+            env=env,
+            cwd="/",
+        )
+        if proc.returncode == 0:
+            title = clean(proc.stdout)
+    except (OSError, subprocess.SubprocessError):
+        title = ""
+
+    if not title:
+        # 要約に失敗したら依頼の先頭をそのまま使う
+        title = clean(prompt)
+    if not title:
+        return 0
+
+    title = sanitize(truncate(title, TITLE_COLUMNS))
+    if not title:
+        return 0
+    if tmux("show-options", "-gqv", "@claude-title-format") == "dir":
+        directory = sanitize(os.path.basename(cwd.rstrip("/")))
+        if directory:
+            title = f"{directory}/{title}"
+
+    tmux("rename-window", "-t", pane, title)
+    return 0
+
+
+def set_state(pane, state):
+    """ウィンドウに Claude の稼働状態を持たせる。
+
+    ステータスバー側は window-status-format の条件式でこれを見てインジケータを出す。
+    ウィンドウ名を書き換えないので、状態が変わってもタブの文字は動かない。
+    """
+    if state:
+        tmux("set-option", "-w", "-t", pane, "@claude_state", state)
+    else:
+        tmux("set-option", "-uw", "-t", pane, "@claude_state")
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--worker":
+        return worker(sys.argv[2], sys.argv[3])
+
+    # 要約のために起動する claude からもこのフックが呼ばれるので、そこでは何もしない
+    if os.environ.get("CLAUDE_TMUX_TITLE_SKIP"):
+        return 0
+
+    pane = os.environ.get("TMUX_PANE")
+    if not pane:  # tmux の外
+        return 0
+
+    try:
+        payload = json.load(sys.stdin)
+    except (ValueError, OSError):
+        return 0
+
+    event = payload.get("hook_event_name") or "UserPromptSubmit"
+    if event in ("Stop", "StopFailure"):
+        set_state(pane, "idle")
+        return 0
+    if event in ("SessionEnd",):
+        set_state(pane, None)
+        return 0
+
+    # 以降は UserPromptSubmit
+    set_state(pane, "busy")
+
+    prompt = (payload.get("prompt") or "").strip()
+    session_id = payload.get("session_id") or ""
+    cwd = payload.get("cwd") or os.getcwd()
+    if not prompt or not session_id:
+        return 0
+
+    # セッションの最初の 1 回だけ動かす
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    marker = CACHE_DIR / session_id
+    try:
+        os.close(os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except FileExistsError:
+        return 0
+    except OSError:
+        return 0
+
+    # プロンプトはファイル経由で渡す (引数だと長さとクォートで壊れやすい)
+    handle, path = tempfile.mkstemp(prefix="claude-tmux-title-")
+    with os.fdopen(handle, "w", encoding="utf-8") as out:
+        out.write(prompt)
+
+    try:
+        with open(path, encoding="utf-8") as stdin_file:
+            subprocess.Popen(
+                [os.path.realpath(__file__), "--worker", pane, cwd],
+                stdin=stdin_file,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+    except OSError:
+        pass
+    finally:
+        os.unlink(path)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
