@@ -52,3 +52,17 @@ if [ -z "$CI" ] && command -v nvim > /dev/null 2>&1 ; then
     echo "Syncing Neovim plugins..."
     nvim --headless "+Lazy! sync" +qa
 fi
+
+# tmux: TPM (プラグインマネージャ) と宣言済みプラグインを用意する
+# (.tmux.conf 側にも同じ bootstrap があるので、どちらか一方が動けばよい)
+if [ -z "$CI" ] && command -v tmux > /dev/null 2>&1 ; then
+    tpm_path="$HOME/.tmux/plugins/tpm"
+    if [ ! -d "$tpm_path" ]; then
+        echo "Installing tpm..."
+        git clone --depth 1 https://github.com/tmux-plugins/tpm "$tpm_path"
+    fi
+    if [ -x "$tpm_path/bin/install_plugins" ]; then
+        echo "Installing tmux plugins..."
+        "$tpm_path/bin/install_plugins"
+    fi
+fi
