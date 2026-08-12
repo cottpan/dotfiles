@@ -97,7 +97,9 @@ return {
       filesystem = {
         follow_current_file = { enabled = true },
         use_libuv_file_watcher = true,
-        filtered_items = { hide_dotfiles = false, hide_gitignored = true },
+        -- dotfiles リポジトリは .gitignore のホワイトリスト運用なので、
+        -- 無視されているファイルも見えないと不便
+        filtered_items = { hide_dotfiles = false, hide_gitignored = false },
       },
     },
   },
