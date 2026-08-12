@@ -41,6 +41,7 @@
 !/.vim/coc-settings.json
 !/bin/
 !/bin/**
+/bin/__pycache__/**
 !/bin.local
 !/etc/
 !/etc/**

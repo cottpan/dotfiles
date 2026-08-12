@@ -1,0 +1,445 @@
+#!/usr/bin/env python3
+"""tmux の status-right に出すセグメントを組み立てる。
+
+macOS のメニューバー相当の情報を出す:
+
+    予定 (icalBuddy) / GitHub 通知 (gh) / Claude Code の使用量 / CPU・メモリ
+
+status-interval が短いので、status-right から直接叩くと毎秒コマンドが走る。
+このスクリプトを `--daemon` で常駐させ、項目ごとの間隔で更新した結果を
+キャッシュファイルへ書き、tmux 側はそれを cat するだけにしている。
+
+    .tmux.conf:  status-right "#(cat ~/.cache/tmux-status/right)..."
+                 run-shell -b '~/bin/tmux-status-right --daemon'
+
+時計は tmux 組み込みの strftime に任せる (毎秒更新のため)。
+"""
+
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import unicodedata
+from datetime import datetime, timedelta
+from pathlib import Path
+
+CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "tmux-status"
+CACHE_FILE = CACHE_DIR / "right"
+PIDFILE = Path(os.environ.get("TMPDIR", "/tmp")) / f"tmux-status-right.{os.getuid()}.pid"
+
+RUNCAT_USAGE = Path.home() / ".claude" / "runcat-usage.json"
+# この時間より古い runcat-usage.json は「Claude Code を使っていない」とみなして薄く出す
+RUNCAT_STALE_SEC = 60 * 60
+
+# 更新間隔 (秒)
+INTERVALS = {"calendar": 60, "github": 60, "claude": 20, "sys": 5}
+
+# Nerd Font のグリフ。豆腐になる環境では tmux 側で
+# `set -g @status-icons plain` にするとテキスト表記に切り替わる
+ICONS = {
+    "calendar": "",  # nf-fa-calendar
+    "meeting": "",  # nf-fa-video_camera (進行中)
+    "github": "",  # nf-fa-bell
+    "claude": "",  # nf-fa-bolt
+    "cpu": "",  # nf-fa-cogs
+    "mem": "",  # nf-fa-database
+}
+PLAIN_ICONS = {
+    "calendar": "CAL",
+    "meeting": "NOW",
+    "github": "GH",
+    "claude": "CC",
+    "cpu": "CPU",
+    "mem": "MEM",
+}
+
+SEP = ""  # powerline の左向き三角
+SEP_THIN = ""  # 同じ地色が続く境目に使う細い区切り
+SEP_PLAIN = "|"
+
+# Solarized dark 寄りの配色 (既存の .tmux.conf に合わせる)
+BAR_BG = "colour235"
+STYLES = {
+    "sys": ("colour245", "colour236"),
+    "claude": ("colour37", "colour236"),
+    "claude_stale": ("colour240", "colour236"),
+    "github": ("colour136", "colour238"),
+    "calendar": ("colour166", "colour238"),
+    "calendar_now": ("colour160", "colour238"),
+}
+
+# 表示幅の見積もりで使う。時計と status-left の分は空けておく
+RESERVED_COLUMNS = 34
+TITLE_COLUMNS = 18
+
+
+def run(cmd, timeout=10):
+    """コマンドを実行して stdout を返す。失敗したら None。"""
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
+def display_width(text):
+    """全角を 2 桁として数えた表示幅。"""
+    width = 0
+    for char in text:
+        if unicodedata.combining(char):
+            continue
+        width += 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+    return width
+
+
+def truncate(text, columns):
+    """表示幅で切り詰める。切ったら … を付ける。"""
+    if display_width(text) <= columns:
+        return text
+    out = ""
+    width = 0
+    for char in text:
+        char_width = 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+        if width + char_width > columns - 1:
+            break
+        out += char
+        width += char_width
+    return out + "…"
+
+
+def humanize(delta):
+    """timedelta を 1h20m / 45m のように表す。"""
+    minutes = int(delta.total_seconds() // 60)
+    if minutes >= 60:
+        return f"{minutes // 60}h{minutes % 60:02d}m"
+    return f"{max(minutes, 0)}m"
+
+
+# --------------------------------------------------------------------------
+# セグメント
+# --------------------------------------------------------------------------
+
+
+def segment_calendar(icons):
+    """次の予定、進行中なら終了時刻までの残り時間 (macOS の icalBuddy)。"""
+    out = run(
+        [
+            "icalBuddy",
+            "-nc",  # カレンダー名を出さない
+            "-nrd",  # 相対日付表記を使わない
+            "-b",
+            "",
+            "-ps",
+            "|;;|",
+            "-iep",
+            "datetime,title",
+            "-df",
+            "%Y-%m-%d",
+            "-tf",
+            "%H:%M",
+            "-ea",  # 終日予定は除く
+            "eventsFrom:today",
+            "to:today+1",
+        ],
+        timeout=20,
+    )
+    if not out:
+        return None
+
+    now = datetime.now()
+    events = []
+    seen = set()
+    for line in out.splitlines():
+        if ";;" not in line:
+            continue
+        title, _, when = line.partition(";;")
+        title = title.strip()
+        stamps = re.findall(r"(\d{4}-\d{2}-\d{2})?\s*(?:at\s*)?(\d{2}:\d{2})", when)
+        if not stamps:
+            continue
+        date_hint = None
+        parsed = []
+        for date_part, time_part in stamps:
+            if date_part:
+                date_hint = date_part
+            if not date_hint:
+                continue
+            try:
+                parsed.append(datetime.strptime(f"{date_hint} {time_part}", "%Y-%m-%d %H:%M"))
+            except ValueError:
+                continue
+        if not parsed:
+            continue
+        start = parsed[0]
+        end = parsed[1] if len(parsed) > 1 else start + timedelta(hours=1)
+        key = (title, start, end)
+        if key in seen:  # 複数のカレンダーに同じ予定が入っていることがある
+            continue
+        seen.add(key)
+        events.append((start, end, title))
+
+    events.sort()
+
+    for start, end, title in events:
+        if start <= now < end:
+            label = f"{truncate(title, TITLE_COLUMNS)} ~{end:%H:%M} ({humanize(end - now)})"
+            return icons["meeting"] + " " + label, "calendar_now"
+
+    for start, end, title in events:
+        if start > now:
+            # 日をまたぐ予定は日付も出す
+            when = f"{start:%H:%M}" if start.date() == now.date() else f"{start:%m/%d %H:%M}"
+            label = f"{when} {truncate(title, TITLE_COLUMNS)} ({humanize(start - now)}後)"
+            return icons["calendar"] + " " + label, "calendar"
+
+    return None
+
+
+def segment_github(icons):
+    """未読の GitHub 通知件数。0 件なら出さない。"""
+    out = run(
+        ["gh", "api", "--paginate", "notifications", "--jq", ".[].id"],
+        timeout=20,
+    )
+    if out is None:
+        return None
+    count = len([line for line in out.splitlines() if line.strip()])
+    if count == 0:
+        return None
+    return f"{icons['github']} {count}", "github"
+
+
+def segment_claude(icons):
+    """Claude Code のレート制限使用率 (runcat-statusline.py が書く JSON)。"""
+    try:
+        data = json.loads(RUNCAT_USAGE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+    metrics = data.get("metrics") or []
+    five_hour = next((m for m in metrics if m.get("title") == "5h"), None)
+    if five_hour is None:
+        five_hour = metrics[0] if metrics else None
+    if five_hour is None:
+        return None
+
+    value = str(five_hour.get("formattedValue", "")).replace(" · ", " ")
+    style = "claude"
+    updated = data.get("lastUpdatedDate")
+    if updated:
+        try:
+            age = time.time() - datetime.strptime(updated, "%Y-%m-%dT%H:%M:%SZ").timestamp()
+            # lastUpdatedDate は UTC なので、ローカル時刻との差を補正する
+            age -= datetime.now().astimezone().utcoffset().total_seconds()
+            if age > RUNCAT_STALE_SEC:
+                style = "claude_stale"
+        except (ValueError, TypeError):
+            pass
+
+    return f"{icons['claude']} {value}", style
+
+
+def _sys_macos():
+    cpu = None
+    out = run(["top", "-l", "1", "-n", "0"], timeout=10)
+    if out:
+        match = re.search(r"CPU usage:.*?([\d.]+)%\s+idle", out)
+        if match:
+            cpu = 100.0 - float(match.group(1))
+
+    mem = None
+    out = run(["memory_pressure"], timeout=10)
+    if out:
+        match = re.search(r"free percentage:\s*(\d+)%", out)
+        if match:
+            mem = 100 - int(match.group(1))
+    return cpu, mem
+
+
+def _sys_linux():
+    cpu = None
+    try:
+        def sample():
+            with open("/proc/stat", encoding="utf-8") as handle:
+                parts = [float(value) for value in handle.readline().split()[1:]]
+            return sum(parts), parts[3]
+
+        total1, idle1 = sample()
+        time.sleep(0.2)
+        total2, idle2 = sample()
+        if total2 > total1:
+            cpu = (1 - (idle2 - idle1) / (total2 - total1)) * 100
+    except (OSError, IndexError, ValueError):
+        pass
+
+    mem = None
+    try:
+        info = {}
+        with open("/proc/meminfo", encoding="utf-8") as handle:
+            for line in handle:
+                key, _, value = line.partition(":")
+                info[key] = float(value.split()[0])
+        if info.get("MemTotal"):
+            mem = (1 - info.get("MemAvailable", 0) / info["MemTotal"]) * 100
+    except (OSError, ValueError):
+        pass
+    return cpu, mem
+
+
+def segment_sys(icons):
+    """CPU 使用率とメモリ使用率。"""
+    cpu, mem = _sys_macos() if sys.platform == "darwin" else _sys_linux()
+    parts = []
+    if cpu is not None:
+        parts.append(f"{icons['cpu']} {cpu:.0f}%")
+    if mem is not None:
+        parts.append(f"{icons['mem']} {mem:.0f}%")
+    if not parts:
+        return None
+    return " ".join(parts), "sys"
+
+
+# 優先度の低い順。幅が足りないときは先頭から落とす
+SEGMENTS = [
+    ("sys", segment_sys),
+    ("claude", segment_claude),
+    ("github", segment_github),
+    ("calendar", segment_calendar),
+]
+
+
+# --------------------------------------------------------------------------
+# 組み立て
+# --------------------------------------------------------------------------
+
+
+def client_width():
+    """一番狭いクライアントの幅。分からなければ 200 とみなす。"""
+    out = run(["tmux", "list-clients", "-F", "#{client_width}"], timeout=5)
+    widths = [int(line) for line in (out or "").split() if line.isdigit()]
+    return min(widths) if widths else 200
+
+
+def tmux_option(name, default):
+    out = run(["tmux", "show-options", "-gqv", name], timeout=5)
+    value = (out or "").strip()
+    return value if value else default
+
+
+def compose(results, icons_plain):
+    """幅に収まるセグメントだけを powerline 風に並べる。"""
+    budget = client_width() - RESERVED_COLUMNS
+    chosen = []
+    used = 0
+    # 優先度の高い順に詰めていく
+    for name, _ in reversed(SEGMENTS):
+        item = results.get(name)
+        if not item:
+            continue
+        text, style = item
+        width = display_width(text) + 3  # セパレータと左右の余白
+        if used + width > budget:
+            continue
+        used += width
+        chosen.append((name, text, style))
+
+    # 表示は優先度の低いものを左に置く
+    order = [name for name, _ in SEGMENTS]
+    chosen.sort(key=lambda item: order.index(item[0]))
+
+    out = ""
+    previous_bg = BAR_BG
+    for _, text, style in chosen:
+        fg, bg = STYLES[style]
+        if icons_plain:
+            head = f"#[fg={fg},bg={bg}]{SEP_PLAIN}"
+        elif bg == previous_bg:
+            # 地色が同じなら三角は見えないので細い区切りにする
+            head = f"#[fg=colour240,bg={bg}]{SEP_THIN}#[fg={fg},bg={bg}]"
+        else:
+            head = f"#[fg={bg},bg={previous_bg}]{SEP}#[fg={fg},bg={bg}]"
+        out += f"{head} {text} "
+        previous_bg = bg
+    if out:
+        # 時計は tmux 側で描くので、地色をステータスバーの色に戻しておく
+        if icons_plain:
+            out += "#[fg=default,bg=default]"
+        else:
+            out += f"#[fg={BAR_BG},bg={previous_bg}]{SEP}#[fg=default,bg={BAR_BG}]"
+    return out
+
+
+def refresh(results, last_run, icons, now):
+    for name, func in SEGMENTS:
+        if now - last_run.get(name, 0) < INTERVALS[name]:
+            continue
+        last_run[name] = now
+        try:
+            results[name] = func(icons)
+        except Exception:  # セグメント 1 つの失敗で常駐を止めない
+            results[name] = None
+
+
+def write_cache(text):
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = CACHE_FILE.with_suffix(".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(CACHE_FILE)
+
+
+def already_running():
+    try:
+        pid = int(PIDFILE.read_text())
+    except (OSError, ValueError):
+        return False
+    if pid == os.getpid():
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def main():
+    once = "--once" in sys.argv
+    if not once:
+        if already_running():
+            return 0
+        PIDFILE.write_text(str(os.getpid()))
+
+    results = {}
+    last_run = {}
+    previous = None
+    try:
+        while True:
+            icons_plain = tmux_option("@status-icons", "nerd") == "plain"
+            icons = PLAIN_ICONS if icons_plain else ICONS
+            refresh(results, last_run, icons, time.time())
+            text = compose(results, icons_plain)
+            if once:
+                print(text)
+                return 0
+            if text != previous:
+                write_cache(text)
+                previous = text
+            time.sleep(2)
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        if not once:
+            try:
+                if int(PIDFILE.read_text()) == os.getpid():
+                    PIDFILE.unlink()
+            except (OSError, ValueError):
+                pass
+
+
+if __name__ == "__main__":
+    sys.exit(main())
