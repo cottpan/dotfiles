@@ -39,12 +39,13 @@ INTERVALS = {"calendar": 60, "github": 60, "claude": 20, "sys": 5}
 # Nerd Font のグリフ。豆腐になる環境では tmux 側で
 # `set -g @status-icons plain` にするとテキスト表記に切り替わる
 ICONS = {
-    "calendar": "",  # nf-fa-calendar
-    "meeting": "",  # nf-fa-video_camera (進行中)
-    "github": "",  # nf-fa-bell
-    "claude": "",  # nf-fa-bolt
-    "cpu": "",  # nf-fa-cogs
-    "mem": "",  # nf-fa-database
+    "calendar": "\uf073",  # nf-fa-calendar
+    "meeting": "\uf03d",  # nf-fa-video_camera (進行中の MTG)
+    "github": "\uf0f3",  # nf-fa-bell
+    "claude": "\uf069",  # nf-fa-asterisk (Claude のマークに近い六方の星)
+    "cpu": "\uf085",  # nf-fa-cogs
+    "mem": "\uf1c0",  # nf-fa-database
+    "clock": "\uf017",  # nf-fa-clock_o
 }
 PLAIN_ICONS = {
     "calendar": "CAL",
@@ -53,10 +54,11 @@ PLAIN_ICONS = {
     "claude": "CC",
     "cpu": "CPU",
     "mem": "MEM",
+    "clock": "",
 }
 
-SEP = ""  # powerline の左向き三角
-SEP_THIN = ""  # 同じ地色が続く境目に使う細い区切り
+SEP = "\ue0b2"  # powerline の左向き三角
+SEP_THIN = "\ue0b3"  # 同じ地色が続く境目に使う細い区切り
 SEP_PLAIN = "|"
 
 # Solarized dark 寄りの配色 (既存の .tmux.conf に合わせる)
@@ -68,10 +70,11 @@ STYLES = {
     "github": ("colour136", "colour238"),
     "calendar": ("colour166", "colour238"),
     "calendar_now": ("colour160", "colour238"),
+    "clock": ("colour235", "colour136"),
 }
 
-# 表示幅の見積もりで使う。時計と status-left の分は空けておく
-RESERVED_COLUMNS = 34
+# 表示幅の見積もりで使う。status-left と時計 (日付 + 時刻) の分は空けておく
+RESERVED_COLUMNS = 44
 TITLE_COLUMNS = 18
 
 
@@ -223,13 +226,21 @@ def segment_claude(icons):
         return None
 
     metrics = data.get("metrics") or []
-    five_hour = next((m for m in metrics if m.get("title") == "5h"), None)
-    if five_hour is None:
-        five_hour = metrics[0] if metrics else None
-    if five_hour is None:
+    if not metrics:
         return None
 
-    value = str(five_hour.get("formattedValue", "")).replace(" · ", " ")
+    # 5h:12%(2h54m) 1w:26% の形にする。リセットまでの時間は最初の枠だけ出す
+    parts = []
+    for index, metric in enumerate(metrics):
+        title = metric.get("title")
+        percent, _, reset = str(metric.get("formattedValue", "")).partition(" · ")
+        if not title or not percent:
+            continue
+        parts.append(f"{title}:{percent}({reset})" if reset and index == 0 else f"{title}:{percent}")
+    if not parts:
+        return None
+
+    value = " ".join(parts)
     style = "claude"
     updated = data.get("lastUpdatedDate")
     if updated:
@@ -332,7 +343,7 @@ def tmux_option(name, default):
     return value if value else default
 
 
-def compose(results, icons_plain):
+def compose(results, icons, icons_plain):
     """幅に収まるセグメントだけを powerline 風に並べる。"""
     budget = client_width() - RESERVED_COLUMNS
     chosen = []
@@ -366,13 +377,17 @@ def compose(results, icons_plain):
             head = f"#[fg={bg},bg={previous_bg}]{SEP}#[fg={fg},bg={bg}]"
         out += f"{head} {text} "
         previous_bg = bg
-    if out:
-        # 時計は tmux 側で描くので、地色をステータスバーの色に戻しておく
-        if icons_plain:
-            out += "#[fg=default,bg=default]"
-        else:
-            out += f"#[fg={BAR_BG},bg={previous_bg}]{SEP}#[fg=default,bg={BAR_BG}]"
-    return out
+    # 時計セグメントの手前まで。日付は曜日を英語で出したいのでここで組み立てる
+    # (tmux 組み込みの strftime はサーバのロケールに従うため %a が「水」になる)
+    fg, bg = STYLES["clock"]
+    date = datetime.now().strftime("%m-%d(%a)")
+    icon = ("" if icons_plain else icons["clock"] + " ")
+    if icons_plain:
+        head = f"#[fg={fg},bg={bg}]{SEP_PLAIN}"
+    else:
+        head = f"#[fg={bg},bg={previous_bg}]{SEP}#[fg={fg},bg={bg},bold]"
+    # 時刻 (%H:%M:%S) は毎秒更新したいので tmux 側で付け足す
+    return out + f"{head} {icon}{date}"
 
 
 def refresh(results, last_run, icons, now):
@@ -422,7 +437,7 @@ def main():
             icons_plain = tmux_option("@status-icons", "nerd") == "plain"
             icons = PLAIN_ICONS if icons_plain else ICONS
             refresh(results, last_run, icons, time.time())
-            text = compose(results, icons_plain)
+            text = compose(results, icons, icons_plain)
             if once:
                 print(text)
                 return 0
