@@ -20,7 +20,8 @@ return {
     init = function()
       -- 旧 ale の表示設定に相当する診断まわり
       vim.diagnostic.config({
-        virtual_text = { prefix = "●" },
+        -- 行内の表示は tiny-inline-diagnostic に任せるので、標準の virtual_text は切る
+        virtual_text = false,
         severity_sort = true,
         signs = {
           text = {
@@ -42,11 +43,17 @@ return {
       })
     end,
     config = function()
-      -- nvim-cmp の補完能力を全サーバに渡す
+      -- nvim-cmp の補完能力と、nvim-ufo が使う折りたたみ範囲を全サーバに渡す
+      local capabilities = vim.lsp.protocol.make_client_capabilities()
       local ok, cmp_lsp = pcall(require, "cmp_nvim_lsp")
       if ok then
-        vim.lsp.config("*", { capabilities = cmp_lsp.default_capabilities() })
+        capabilities = vim.tbl_deep_extend("force", capabilities, cmp_lsp.default_capabilities())
       end
+      capabilities.textDocument.foldingRange = {
+        dynamicRegistration = false,
+        lineFoldingOnly = true,
+      }
+      vim.lsp.config("*", { capabilities = capabilities })
 
       vim.api.nvim_create_autocmd("LspAttach", {
         group = vim.api.nvim_create_augroup("LspKeymaps", { clear = true }),
@@ -66,5 +73,83 @@ return {
         end,
       })
     end,
+  },
+
+  -- 定義・参照などをプレビュー付きの一覧で開く
+  -- (gd / gr の飛ぶだけの動きは残してあるので、見比べたい時にこちらを使う)
+  {
+    "dnlhc/glance.nvim",
+    cmd = "Glance",
+    keys = {
+      { "<leader>gd", "<Cmd>Glance definitions<CR>", desc = "Glance definitions" },
+      { "<leader>gr", "<Cmd>Glance references<CR>", desc = "Glance references" },
+      { "<leader>gi", "<Cmd>Glance implementations<CR>", desc = "Glance implementations" },
+      { "<leader>gy", "<Cmd>Glance type_definitions<CR>", desc = "Glance type definitions" },
+    },
+    opts = {},
+  },
+
+  -- バッファ内のシンボルを絞り込んで移動する
+  {
+    "bassamsdata/namu.nvim",
+    cmd = "Namu",
+    keys = {
+      { "<leader>ss", "<Cmd>Namu symbols<CR>", desc = "Symbols in buffer" },
+      { "<leader>sw", "<Cmd>Namu workspace<CR>", desc = "Symbols in workspace" },
+    },
+    config = function()
+      require("namu").setup({
+        namu_symbols = { enable = true, options = {} },
+      })
+    end,
+  },
+
+  -- 診断をカーソル行にコンパクトに出す (標準の virtual_text は上で切ってある)
+  {
+    "rachartier/tiny-inline-diagnostic.nvim",
+    event = "LspAttach",
+    priority = 1000,
+    config = function()
+      require("tiny-inline-diagnostic").setup({
+        preset = "modern",
+        options = { show_source = { enabled = true } },
+      })
+    end,
+  },
+
+  -- LSP の情報を使った折りたたみ
+  {
+    "kevinhwang91/nvim-ufo",
+    dependencies = { "kevinhwang91/promise-async" },
+    event = "BufReadPost",
+    init = function()
+      -- ufo は「最初は全部開いている」状態を前提にしている
+      vim.o.foldcolumn = "1"
+      vim.o.foldlevel = 99
+      vim.o.foldlevelstart = 99
+      vim.o.foldenable = true
+    end,
+    keys = {
+      {
+        "zR",
+        function()
+          require("ufo").openAllFolds()
+        end,
+        desc = "Open all folds",
+      },
+      {
+        "zM",
+        function()
+          require("ufo").closeAllFolds()
+        end,
+        desc = "Close all folds",
+      },
+    },
+    opts = {
+      -- LSP が折りたたみ範囲を返さない時はインデントで代用する
+      provider_selector = function()
+        return { "lsp", "indent" }
+      end,
+    },
   },
 }

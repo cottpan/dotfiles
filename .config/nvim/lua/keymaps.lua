@@ -21,7 +21,8 @@ end, { desc = "Previous diagnostic" })
 map("n", "<C-j>", function()
   jump_diagnostic(1)
 end, { desc = "Next diagnostic" })
-map("n", "<leader>e", vim.diagnostic.open_float, { desc = "Show diagnostic" })
+-- <leader>e はファイルツリー (neo-tree) に譲っている
+map("n", "<leader>d", vim.diagnostic.open_float, { desc = "Show diagnostic" })
 map("n", "<leader>q", vim.diagnostic.setloclist, { desc = "Diagnostics to loclist" })
 
 -- ウィンドウ移動

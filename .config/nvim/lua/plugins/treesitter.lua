@@ -45,4 +45,16 @@ return {
       }
     end,
   },
+
+  -- 画面外に出た関数やブロックの開始行を上部に固定表示する
+  {
+    "nvim-treesitter/nvim-treesitter-context",
+    main = "treesitter-context", -- モジュール名がリポジトリ名と違う
+    event = "BufReadPost",
+    opts = {
+      max_lines = 3,
+      multiline_threshold = 1,
+      separator = "─",
+    },
+  },
 }
