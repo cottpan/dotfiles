@@ -77,4 +77,48 @@ return {
       })
     end,
   },
+
+  -- ファイルツリー
+  {
+    "nvim-neo-tree/neo-tree.nvim",
+    branch = "v3.x",
+    cmd = "Neotree",
+    dependencies = {
+      "nvim-lua/plenary.nvim",
+      "nvim-tree/nvim-web-devicons",
+      "MunifTanjim/nui.nvim",
+    },
+    keys = {
+      { "<leader>e", "<Cmd>Neotree toggle<CR>", desc = "File tree" },
+      { "<leader>o", "<Cmd>Neotree focus<CR>", desc = "Focus file tree" },
+    },
+    opts = {
+      window = { width = 32 },
+      filesystem = {
+        follow_current_file = { enabled = true },
+        use_libuv_file_watcher = true,
+        -- dotfiles リポジトリは .gitignore のホワイトリスト運用なので、
+        -- 無視されているファイルも見えないと不便
+        filtered_items = { hide_dotfiles = false, hide_gitignored = false },
+      },
+    },
+  },
+
+  -- j / k を連打したときだけ加速する
+  {
+    "rainbowhxch/accelerated-jk.nvim",
+    keys = {
+      { "j", "<Plug>(accelerated_jk_gj)", mode = "n", desc = "Down (accelerated)" },
+      { "k", "<Plug>(accelerated_jk_gk)", mode = "n", desc = "Up (accelerated)" },
+    },
+    opts = {},
+  },
+
+  -- Markdown をバッファ内で整形して表示する
+  {
+    "OXY2DEV/markview.nvim",
+    ft = { "markdown", "quarto", "rmd", "codecompanion" },
+    dependencies = { "nvim-tree/nvim-web-devicons" },
+    opts = {},
+  },
 }
