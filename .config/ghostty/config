@@ -1,0 +1,6 @@
+grapheme-width-method = legacy
+
+font-family = "Monaco"
+font-family = "Hiragino Sans"
+# Nerd Font のグリフ (tmux ステータスや nvim-web-devicons 用) だけをフォールバックで補う
+font-family = "Symbols Nerd Font Mono"
