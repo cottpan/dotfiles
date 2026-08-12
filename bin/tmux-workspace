@@ -1,8 +1,13 @@
 #!/usr/bin/env sh
 # 作業用の tmux ウィンドウを開く。
 #
-# 1 ウィンドウ = 1 作業ストリームとして、エディタ (nvim) とエージェント (claude) を
-# 左右に並べる。並行作業はウィンドウを増やして切り替える想定。
+# 1 ウィンドウ = 1 作業ストリーム。並行作業はウィンドウを増やして切り替える想定。
+#
+#   ┌──────────────┬──────────┐
+#   │ nvim         │ claude   │
+#   ├──────────────┤          │
+#   │ terminal     │          │
+#   └──────────────┴──────────┘
 #
 #   tmux-workspace                 カレントディレクトリで開く
 #   tmux-workspace ~/src/dc/foo    指定したディレクトリで開く
@@ -48,18 +53,29 @@ option() {
 
 editor=$(option @workspace-editor "nvim")
 agent=$(option @workspace-agent "claude")
-agent_percent=$(option @workspace-agent-percent "40")
+agent_percent=$(option @workspace-agent-percent "30")
+terminal_percent=$(option @workspace-terminal-percent "20")
 
 [ -n "$name" ] || name=$(basename "$dir")
 
 # エディタとエージェントはシェル経由で起動する。
 # ペインのコマンドとして直接起動すると、終了した時点でペインごと消えてしまう
 layout() {
-    target=$1
-    tmux send-keys -t "$target" "$editor" Enter
-    tmux split-window -h -l "${agent_percent}%" -c "$dir" -t "$target"
-    tmux send-keys -t "$target" "$agent" Enter
-    tmux select-pane -t "$target" -L
+    editor_pane=$1
+
+    # 右: エージェント
+    agent_pane=$(tmux split-window -h -l "${agent_percent}%" -c "$dir" \
+        -t "$editor_pane" -P -F '#{pane_id}')
+
+    # 左下: ターミナル (エディタのペインだけを上下に分ける)
+    # 0 を指定すると作らない
+    if [ "$terminal_percent" -gt 0 ] 2> /dev/null; then
+        tmux split-window -v -l "${terminal_percent}%" -c "$dir" -t "$editor_pane" > /dev/null
+    fi
+
+    tmux send-keys -t "$editor_pane" "$editor" Enter
+    tmux send-keys -t "$agent_pane" "$agent" Enter
+    tmux select-pane -t "$editor_pane"
 }
 
 if [ -z "${TMUX:-}" ]; then
@@ -67,12 +83,12 @@ if [ -z "${TMUX:-}" ]; then
     if tmux has-session -t "=$name" 2>/dev/null; then
         exec tmux attach-session -t "=$name"
     fi
-    tmux new-session -d -s "$name" -n "$name" -c "$dir"
-    layout "=$name"
+    pane=$(tmux new-session -d -s "$name" -n "$name" -c "$dir" -P -F '#{pane_id}')
+    layout "$pane"
     exec tmux attach-session -t "=$name"
 fi
 
 # 同じディレクトリでも毎回新しいウィンドウを作る
 # (同じプロジェクトの作業を複数並行させることがあるため)
-tmux new-window -n "$name" -c "$dir"
-layout "$(tmux display-message -p '#{window_id}')"
+pane=$(tmux new-window -n "$name" -c "$dir" -P -F '#{pane_id}')
+layout "$pane"
