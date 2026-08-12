@@ -5,6 +5,15 @@ export MINT_PATH="$HOME/.mint"
 export MINT_LINK_PATH="$MINT_PATH/bin"
 export BUN_INSTALL="$HOME/.bun"
 
+# エディタは Neovim (無い環境では vim にフォールバック)
+if command -v nvim > /dev/null 2>&1; then
+  export EDITOR=nvim
+  export VISUAL=nvim
+elif command -v vim > /dev/null 2>&1; then
+  export EDITOR=vim
+  export VISUAL=vim
+fi
+
 if [ "$(uname)" = "Darwin" ]; then
   export CPPFLAGS="-I/opt/homebrew/opt/openjdk@11/include"
   export ANDROID_HOME="$HOME/Library/Android/sdk"

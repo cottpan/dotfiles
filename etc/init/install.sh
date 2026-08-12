@@ -40,13 +40,15 @@ else
     echo "Unsupported OS. Skipping OS-specific package installation."
 fi
 
-# dotfiles の .vimrc で dein を管理するため、dein-installer は使わない
+# 素の vim 用 (.vimrc の backupdir / directory)
 if [ -z "$CI" ] ; then
     mkdir -p "$HOME/.vim/backup"
-    dein_path="$HOME/.cache/dein/repos/github.com/Shougo/dein.vim"
-    if [ ! -d "$dein_path" ]; then
-        echo "Installing dein.vim..."
-        mkdir -p "$(dirname "$dein_path")"
-        git clone --depth 1 https://github.com/Shougo/dein.vim.git "$dein_path"
-    fi
+fi
+
+# Neovim: lazy.nvim は .config/nvim/init.lua が自前で bootstrap するので、
+# ここでは初回のプラグイン同期だけ済ませておく
+# (mason の LSP サーバは headless では入らないので、初回の nvim 起動時に導入される)
+if [ -z "$CI" ] && command -v nvim > /dev/null 2>&1 ; then
+    echo "Syncing Neovim plugins..."
+    nvim --headless "+Lazy! sync" +qa
 fi
