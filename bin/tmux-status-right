@@ -65,11 +65,11 @@ SEP_PLAIN = "|"
 BAR_BG = "colour235"
 STYLES = {
     "sys": ("colour245", "colour236"),
-    "claude": ("colour37", "colour236"),
+    "claude": ("colour166", "colour236"),  # Claude はブランド色に合わせてオレンジ
     "claude_stale": ("colour240", "colour236"),
     "github": ("colour136", "colour238"),
-    "calendar": ("colour166", "colour238"),
-    "calendar_now": ("colour160", "colour238"),
+    "calendar": ("colour37", "colour238"),
+    "calendar_now": ("colour160", "colour238"),  # 進行中は赤で目立たせる
     "clock": ("colour235", "colour136"),
 }
 
