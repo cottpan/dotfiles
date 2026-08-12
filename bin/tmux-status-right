@@ -385,7 +385,10 @@ def compose(results, icons, icons_plain):
     if icons_plain:
         head = f"#[fg={fg},bg={bg}]{SEP_PLAIN}"
     else:
-        head = f"#[fg={bg},bg={previous_bg}]{SEP}#[fg={fg},bg={bg},bold]"
+        # bold は付けない。Monaco のようにレギュラーしか無いフォントだと、
+        # ボールドを持つ別のフォント (Hiragino Sans など) にフォールバックして
+        # そこだけ等幅でなくなる
+        head = f"#[fg={bg},bg={previous_bg}]{SEP}#[fg={fg},bg={bg}]"
     # 時刻 (%H:%M:%S) は毎秒更新したいので tmux 側で付け足す
     return out + f"{head} {icon}{date}"
 
