@@ -29,6 +29,7 @@ PACKAGES=(
     fd-find
     ffmpeg
     fzf
+    gcc
     gh
     git
     git-delta
@@ -36,6 +37,8 @@ PACKAGES=(
     libjxl
     libwebp-tools
     make
+    neovim
+    ripgrep
     yt-dlp
     zsh
 )

@@ -23,6 +23,12 @@ fi
 
 chpwd() { ls -lr }
 
+# vim / vi は Neovim を使う
+if command -v nvim > /dev/null 2>&1; then
+  alias vim=nvim
+  alias vi=nvim
+fi
+
 # Load custom functions from .zsh/functions directory
 if [ -d "$HOME/.zsh/functions" ]; then
   for func_file in $HOME/.zsh/functions/*; do
