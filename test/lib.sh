@@ -1,3 +1,4 @@
+# shellcheck shell=sh
 # テスト用の共通処理。
 #
 # macOS 標準の bash 3.2 でも動かすため、配列や連想配列などは使わず POSIX sh に留める。

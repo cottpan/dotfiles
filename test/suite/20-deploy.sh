@@ -1,13 +1,16 @@
+# shellcheck shell=sh
 # make install / make clean を隔離した HOME で試す。
 #
 # 本物の HOME には触らない。Makefile が $(HOME) を使っているので上書きするだけで隔離できる。
 
 suite "デプロイ (隔離した HOME)"
 
-fake_home=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-test-home.XXXXXX") || {
+fake_home=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-test-home.XXXXXX") || fake_home=""
+
+if [ -z "$fake_home" ]; then
     fail "一時 HOME の作成"
-    return 0 2> /dev/null || true
-}
+    return 0
+fi
 
 deploy_cleanup() {
     [ -n "$fake_home" ] && rm -rf "$fake_home"

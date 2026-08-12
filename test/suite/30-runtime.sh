@@ -1,3 +1,4 @@
+# shellcheck shell=sh
 # この環境で実際に動くかを見る。読み取りのみで、設定を書き換えたりはしない。
 #
 # 道具が入っていない環境 (CI の静的チェックだけの回など) では素直に skip する。
@@ -26,10 +27,10 @@ if [ -L "$HOME/bin" ] || [ -d "$HOME/bin" ]; then
     if have tmux-workspace; then
         ok "bin のコマンドが PATH から引ける (tmux-workspace)"
     else
-        skip "bin のコマンドが PATH から引ける" "この shell の PATH に ~/bin が無い"
+        skip "bin のコマンドが PATH から引ける" "この shell の PATH に \$HOME/bin が無い"
     fi
 else
-    skip "bin のコマンドが PATH から引ける" "~/bin が未デプロイ"
+    skip "bin のコマンドが PATH から引ける" "\$HOME/bin が未デプロイ"
 fi
 
 # --- bin のスクリプト -------------------------------------------------------
@@ -114,7 +115,7 @@ if have nvim; then
     fi
 
     # 宣言したプラグインが実際に入っているか
-    output=$(nvim --headless -c 'lua
+    plugin_check='lua
         local lazy = require("lazy")
         local missing = {}
         for _, p in ipairs(lazy.plugins()) do
@@ -123,8 +124,8 @@ if have nvim; then
         if #missing > 0 then
           io.stderr:write("未導入: " .. table.concat(missing, ", ") .. "\n")
           vim.cmd("cq")
-        end' -c 'qa' 2>&1)
-    if [ $? -eq 0 ]; then
+        end'
+    if output=$(nvim --headless -c "$plugin_check" -c 'qa' 2>&1); then
         ok "宣言したプラグインが全て入っている"
     else
         fail "宣言したプラグインが全て入っている" "$output"
@@ -173,16 +174,17 @@ fi
 
 if have python3; then
     # 空の JSON を渡しても落ちないこと (フックは何も出力しない)
-    output=$(printf '%s' '{}' | TMUX_PANE= "$DOTPATH/bin/claude-tmux-title" 2>&1)
-    if [ $? -eq 0 ] && [ -z "$output" ]; then
+    # TMUX_PANE を空にして「tmux の外から呼ばれた」状態を作る
+    output=$(printf '%s' '{}' | env TMUX_PANE= "$DOTPATH/bin/claude-tmux-title" 2>&1)
+    smoke_status=$?
+    if [ $smoke_status -eq 0 ] && [ -z "$output" ]; then
         ok "claude-tmux-title が tmux 外で黙って終わる"
     else
         fail "claude-tmux-title が tmux 外で黙って終わる" "$output"
     fi
 
     if have tmux && [ -n "${TMUX:-}" ]; then
-        output=$("$DOTPATH/bin/tmux-status-right" --once 2>&1)
-        if [ $? -eq 0 ]; then
+        if output=$("$DOTPATH/bin/tmux-status-right" --once 2>&1); then
             ok "tmux-status-right --once が出力を返す"
         else
             fail "tmux-status-right --once が出力を返す" "$output"

@@ -1,3 +1,4 @@
+# shellcheck shell=sh
 # 構文チェック。副作用なしで、どの環境でも走らせられるもの。
 #
 # チェッカはシェバンを見て振り分ける。新しいスクリプトを bin/ に置いても、
@@ -88,7 +89,8 @@ rm -rf "$DOTPATH/bin/__pycache__" 2> /dev/null || true
 if have nvim; then
     lua_files=$(git -C "$DOTPATH" ls-files '.config/nvim/**/*.lua')
     if [ -n "$lua_files" ]; then
-        output=$(cd "$DOTPATH" && nvim --headless -c 'lua
+        # 読み込めない (構文が壊れている) ファイルがあれば cq で異常終了させる
+        lua_check='lua
             local bad = {}
             for _, f in ipairs(vim.fn.glob(vim.fn.getcwd() .. "/.config/nvim/**/*.lua", false, true)) do
               local chunk, err = loadfile(f)
@@ -97,8 +99,8 @@ if have nvim; then
             if #bad > 0 then
               io.stderr:write(table.concat(bad, "\n") .. "\n")
               vim.cmd("cq")
-            end' -c 'qa' 2>&1)
-        if [ $? -eq 0 ]; then
+            end'
+        if output=$(cd "$DOTPATH" && nvim --headless -c "$lua_check" -c 'qa' 2>&1); then
             ok "Lua 構文 .config/nvim/**/*.lua"
         else
             fail "Lua 構文 .config/nvim/**/*.lua" "$output"
@@ -131,7 +133,7 @@ else
     skip "TOML 構文 .config/mise/config.toml" "python3 が無い"
 fi
 
-# shellcheck は入っていれば走らせる (必須にはしない)
+# ShellCheck は入っていれば走らせる (必須にはしない)
 if have shellcheck; then
     for file in $(script_files); do
         path="$DOTPATH/$file"
