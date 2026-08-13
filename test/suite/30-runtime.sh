@@ -99,11 +99,13 @@ fi
 # --- Neovim -----------------------------------------------------------------
 
 if have nvim; then
+    # 初回起動では lazy.nvim がプラグインの導入経過を出すので、
+    # 「出力が無いこと」ではなく「エラーが出ていないこと」を見る
     output=$(nvim --headless -c 'sleep 2' -c 'qa' 2>&1)
-    if [ -z "$output" ]; then
-        ok "nvim がエラーなく起動する"
-    else
+    if printf '%s' "$output" | grep -qE '^E[0-9]+:|Error|エラー'; then
         fail "nvim がエラーなく起動する" "$output"
+    else
+        ok "nvim がエラーなく起動する"
     fi
 
     # lazy.nvim のロックファイルが壊れていないか

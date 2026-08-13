@@ -52,5 +52,9 @@ jobs:
       - name: install.sh
         run: ./install.sh
 
+      # install.sh は CI ではプラグイン同期を飛ばすので、ここで明示的に流す
+      - name: Neovim のプラグインを同期
+        run: nvim --headless "+Lazy! sync" +qa
+
       - name: 実行環境の確認
         run: make test-runtime

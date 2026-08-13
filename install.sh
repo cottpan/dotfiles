@@ -38,10 +38,10 @@ is_rosseta2() {
 }
 
 dotfiles_download() {
-    if [ -d "$DOTPATH" ]; then
-        echo "error: $DOTPATH: already exists"
-    elif [ -n "$CI" ] ; then
+    if [ -n "${CI:-}" ] ; then
         echo "Working on CI"
+    elif [ -d "$DOTPATH" ]; then
+        echo "error: $DOTPATH: already exists"
     else
         echo "Downloading dotfiles..."
         git clone --recursive "$DOTFILES_GITHUB" "$DOTPATH"
