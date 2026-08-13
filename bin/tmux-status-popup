@@ -1,0 +1,332 @@
+#!/usr/bin/env python3
+"""ステータスバーのセグメントをクリックしたときに開くポップアップ。
+
+    tmux-status-popup github     未読の GitHub 通知を一覧する
+    tmux-status-popup calendar   今日の予定を一覧する
+
+fzf があれば選択して Enter でブラウザを開く。無ければ一覧を表示するだけ。
+tmux の display-popup から呼ばれる想定で、コマンドが終わるとポップアップも閉じる。
+"""
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import unicodedata
+from pathlib import Path as pathlib_Path
+from datetime import datetime, timezone
+
+SELF = os.path.realpath(__file__)
+
+BROWSER_OPEN = "open" if sys.platform == "darwin" else "xdg-open"
+
+
+def run(cmd, timeout=30, stdin_text=None):
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout, check=False, input=stdin_text
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
+def have(command):
+    return any(
+        os.access(os.path.join(path, command), os.X_OK)
+        for path in os.environ.get("PATH", "").split(os.pathsep)
+        if path
+    )
+
+
+def display_width(text):
+    return sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in text)
+
+
+def pad(text, columns):
+    """全角を 2 桁として数えて右側を埋める。"""
+    width = display_width(text)
+    if width > columns:
+        out = ""
+        acc = 0
+        for char in text:
+            step = 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+            if acc + step > columns - 1:
+                break
+            out += char
+            acc += step
+        return out + "…" + " " * max(0, columns - acc - 1)
+    return text + " " * (columns - width)
+
+
+def pause(message="\n閉じるには何かキーを押してください "):
+    """display-popup はコマンドが終わると閉じるので、読む時間を作る。"""
+    sys.stdout.write(message)
+    sys.stdout.flush()
+    try:
+        subprocess.run(["sh", "-c", "stty raw -echo 2>/dev/null; dd bs=1 count=1 2>/dev/null; stty sane 2>/dev/null"], check=False)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def choose(items, prompt, header):
+    """fzf で選ばせる。右側に詳細を出す (fprwtree と同じ見せ方)。
+
+    items は (表示行, 詳細テキスト, URL) の並び。fzf が無ければ一覧を出すだけ。
+    戻り値は選ばれた項目の URL。
+    """
+    if not items:
+        return None
+    if not have("fzf"):
+        print("\n".join(line for line, _, _ in items))
+        pause()
+        return None
+
+    # 詳細はファイルに書いておき、プレビューは cat するだけにする (待ちを作らない)
+    workdir = tempfile.mkdtemp(prefix="tmux-status-popup-")
+    try:
+        lines = []
+        for index, (line, detail, url) in enumerate(items):
+            base = pathlib_Path(workdir) / str(index)
+            base.write_text(detail, encoding="utf-8")
+            # GitHub は本文をプレビュー時に取りに行く (件数分の API 呼び出しを避ける)
+            if url and url.startswith("https://api.github.com/"):
+                base.with_suffix(".url").write_text(url, encoding="utf-8")
+            lines.append(f"{index}\t{line}")
+
+        out = run(
+            [
+                "fzf",
+                "--delimiter", "\t",
+                "--with-nth", "2..",
+                "--prompt", prompt,
+                "--header", header,
+                "--preview", f"cat {workdir}/{{1}}; {SELF} --detail {workdir} {{1}}",
+                "--preview-window", "right:60%",
+                "--reverse",
+                "--border",
+                "--no-sort",
+            ],
+            timeout=600,
+            stdin_text="\n".join(lines) + "\n",
+        )
+        if not out:
+            return None
+        index = out.split("\t", 1)[0].strip()
+        if not index.isdigit() or int(index) >= len(items):
+            return None
+        return items[int(index)][2]
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def open_url(url):
+    if url:
+        subprocess.run([BROWSER_OPEN, url], check=False)
+
+
+def relative_time(stamp):
+    try:
+        when = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return ""
+    delta = datetime.now(timezone.utc) - when
+    minutes = int(delta.total_seconds() // 60)
+    if minutes < 60:
+        return f"{max(minutes, 0)}分前"
+    if minutes < 60 * 24:
+        return f"{minutes // 60}時間前"
+    return f"{minutes // (60 * 24)}日前"
+
+
+# --------------------------------------------------------------------------
+# GitHub の通知
+# --------------------------------------------------------------------------
+
+
+def github():
+    out = run(["gh", "api", "--paginate", "notifications"], timeout=60)
+    if out is None:
+        print("gh で通知を取得できませんでした (gh auth status を確認してください)")
+        pause()
+        return 1
+
+    items = []
+    for chunk in re.findall(r"\[.*?\]\s*(?=\[|$)", out, re.S) or [out]:
+        try:
+            items.extend(json.loads(chunk))
+        except ValueError:
+            continue
+    if not items:
+        print("未読の通知はありません")
+        pause()
+        return 0
+
+    entries = []
+    for item in items:
+        repo = (item.get("repository") or {}).get("full_name", "")
+        subject = item.get("subject") or {}
+        title = subject.get("title", "")
+        kind = subject.get("type", "")
+        reason = item.get("reason", "")
+        updated = item.get("updated_at", "")
+        age = relative_time(updated)
+        line = f"{pad(repo, 28)} {pad(title, 52)} {pad(reason, 14)} {age}"
+        detail = (
+            f"リポジトリ : {repo}\n"
+            f"種別       : {kind}\n"
+            f"理由       : {reason}\n"
+            f"更新       : {updated} ({age})\n"
+            f"\nタイトル\n{title}\n"
+        )
+        entries.append((line, detail, subject.get("url") or ""))
+
+    selected = choose(entries, "通知 > ", "Enter でブラウザを開く / Esc で閉じる")
+    if not selected:
+        return 0
+
+    # subject.url は API のアドレスなので、ブラウザ用の URL を引き直す
+    html = run(["gh", "api", selected, "--jq", ".html_url"], timeout=30)
+    open_url((html or "").strip())
+    return 0
+
+
+# --------------------------------------------------------------------------
+# 今日の予定
+# --------------------------------------------------------------------------
+
+
+def calendar():
+    if sys.platform != "darwin" or not have("icalBuddy"):
+        print("icalBuddy が無いため予定を取得できません")
+        pause()
+        return 1
+
+    # イベントごとに @@ で始まり、最後の ;; の後ろに日時が来る。
+    # notes は複数行にまたがるので、行単位ではなくブロック単位で切り出す
+    out = run(
+        [
+            "icalBuddy", "-nc", "-nrd", "-b", "@@", "-ps", "|;;|",
+            "-iep", "datetime,title,notes",
+            "-df", "%Y-%m-%d", "-tf", "%H:%M", "-ea",
+            "eventsToday",
+        ],
+        timeout=30,
+    )
+    if not out:
+        print("今日の予定はありません")
+        pause()
+        return 0
+
+    now = datetime.now()
+    entries = []
+    seen = set()
+    for block in out.split("@@"):
+        if not block.strip():
+            continue
+        fields = block.split(";;")
+        title = fields[0].strip().replace("\n", " ")
+        when = fields[-1].strip() if len(fields) > 1 else ""
+        body = ";;".join(fields[1:-1]) if len(fields) > 2 else ""
+
+        times = re.findall(r"(\d{2}:\d{2})", when)
+        span = f"{times[0]}-{times[1]}" if len(times) > 1 else (times[0] if times else "")
+
+        # 会議室の URL を優先して拾う
+        meeting = ""
+        for pattern in (r"https://meet\.google\.com/\S+", r"https://\S*zoom\.us/\S+",
+                        r"https://teams\.microsoft\.com/\S+"):
+            found = re.search(pattern, body)
+            if found:
+                meeting = found.group(0).rstrip('">,')
+                break
+
+        marker = " "
+        if len(times) > 1:
+            try:
+                start = datetime.combine(now.date(), datetime.strptime(times[0], "%H:%M").time())
+                end = datetime.combine(now.date(), datetime.strptime(times[1], "%H:%M").time())
+                if start <= now < end:
+                    marker = ">"  # 進行中
+                elif end <= now:
+                    marker = "-"  # 終わった
+            except ValueError:
+                pass
+
+        # 複数のカレンダーに同じ予定が入っていることがある
+        if (span, title) in seen:
+            continue
+        seen.add((span, title))
+
+        link = " [link]" if meeting else ""
+        line = f"{marker} {pad(span, 12)} {pad(title, 46)}{link}"
+
+        state = {">": "進行中", "-": "終了"}.get(marker, "これから")
+        # notes には Google Meet の案内などが入るので、そのまま読めるよう整形する
+        notes = re.sub(r"<[^>]+>", "", body).replace(";;", "\n").strip()
+        notes = re.sub(r"\n{3,}", "\n\n", notes)
+        detail = (
+            f"予定   : {title}\n"
+            f"時間   : {span}\n"
+            f"状態   : {state}\n"
+            + (f"会議室 : {meeting}\n" if meeting else "")
+            + (f"\n--- メモ ---\n{notes[:1500]}\n" if notes else "")
+        )
+        entries.append((line, detail, meeting))
+
+    if not entries:
+        print("今日の予定はありません")
+        pause()
+        return 0
+
+    open_url(choose(entries, "予定 > ", "Enter で会議 URL を開く / Esc で閉じる"))
+    return 0
+
+
+def detail(workdir, index):
+    """プレビューから呼ばれ、GitHub の本文だけ遅れて表示する。
+
+    件数分の API 呼び出しを避けるため、見ている項目だけ取りに行って結果を残す。
+    """
+    base = pathlib_Path(workdir) / str(index)
+    cached = base.with_suffix(".body")
+    if cached.exists():
+        sys.stdout.write(cached.read_text(encoding="utf-8"))
+        return 0
+    url_file = base.with_suffix(".url")
+    if not url_file.exists():
+        return 0
+    api_url = url_file.read_text(encoding="utf-8").strip()
+    out = run(
+        ["gh", "api", api_url, "--jq",
+         '"状態   : " + (.state // "-") + "\n作成者 : " + (.user.login // "-") + "\n\n--- 本文 ---\n" + ((.body // "") | .[0:1500])'],
+        timeout=20,
+    )
+    text = f"\n{out}" if out else ""
+    cached.write_text(text, encoding="utf-8")
+    sys.stdout.write(text)
+    return 0
+
+
+def main():
+    if len(sys.argv) >= 4 and sys.argv[1] == "--detail":
+        return detail(sys.argv[2], sys.argv[3])
+    if len(sys.argv) < 2:
+        print(__doc__)
+        return 2
+    target = sys.argv[1]
+    if target in ("github", "gh"):
+        return github()
+    if target in ("calendar", "cal"):
+        return calendar()
+    print(f"不明な対象: {target}")
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
