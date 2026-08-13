@@ -37,7 +37,7 @@
 ポップアップ	C-q g	GitHub の未読通知	Enter でブラウザを開く。	custom
 ポップアップ	C-q a	今日の予定	Enter で会議 URL を開く。	custom
 ポップアップ	C-q v	Neovim のチートシート		custom
-ポップアップ	C-q A	Claude にちょっと聞く	開いた場所のディレクトリで起動する。閉じるには /exit か C-d、または C-c を 2 回。Esc では閉じない (Claude 側がキーを受け取るため)。	custom
+ポップアップ	C-q A	Claude を開く / 隠す	同じキーで切り替わる。隠しても会話は残るので、次に開くと続きから使える。終了したいときは中で /exit か C-d。	custom
 セッション保存	C-q C-s	セッションを保存	ウィンドウ・ペイン構成を保存する (resurrect)。	custom
 セッション保存	C-q C-r	セッションを復元		custom
 プラグイン	C-q I	プラグインを導入	TPM。.tmux.conf に @plugin を足した後に押す。	custom
