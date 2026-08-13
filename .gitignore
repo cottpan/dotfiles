@@ -43,6 +43,8 @@
 !/bin/**
 /bin/__pycache__/**
 !/bin.local
+!/test/
+!/test/**
 !/etc/
 !/etc/**
 !/.tmux.conf

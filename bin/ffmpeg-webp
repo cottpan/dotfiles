@@ -12,4 +12,4 @@ if [[ -n $2 ]]; then
     OUTPUT_FILENAME="$2"
 fi
 
-ffmpeg -i "$1" -vcodec libwebp -lossless 0 -qscale 75 -preset default -loop 0 -vf "fps=10,scale=640:-1" -an ${OUTPUT_FILENAME}
+ffmpeg -i "$1" -vcodec libwebp -lossless 0 -qscale 75 -preset default -loop 0 -vf "fps=10,scale=640:-1" -an "${OUTPUT_FILENAME}"

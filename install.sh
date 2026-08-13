@@ -9,7 +9,7 @@ DOTPATH=$HOME/dotfiles
 DOTFILES_GITHUB="https://github.com/cottpan/dotfiles.git"; export DOTFILES_GITHUB
 
 # アーキテクチャ名は UNAME に入れておく
-UNAME=`uname -m`
+UNAME=$(uname -m)
 
 is_macos() {
     test "$(uname)" == "Darwin"
@@ -38,10 +38,10 @@ is_rosseta2() {
 }
 
 dotfiles_download() {
-    if [ -d "$DOTPATH" ]; then
-        echo "error: $DOTPATH: already exists"
-    elif [ -n "$CI" ] ; then
+    if [ -n "${CI:-}" ] ; then
         echo "Working on CI"
+    elif [ -d "$DOTPATH" ]; then
+        echo "error: $DOTPATH: already exists"
     else
         echo "Downloading dotfiles..."
         git clone --recursive "$DOTFILES_GITHUB" "$DOTPATH"
@@ -68,7 +68,7 @@ if is_macos ; then
         echo "ARM Processor Detected."
     fi
 
-    if !( xcode-select -p > /dev/null 2>&1 ); then
+    if ! xcode-select -p > /dev/null 2>&1; then
         echo "Installing Xcode CLT..."
         echo "Please re-run after Xcode CLT installation is complete."
         xcode-select --install
@@ -106,8 +106,8 @@ if is_fedora && ! command -v make > /dev/null 2>&1; then
     exit 1
 fi
 
-cd ${DOTPATH} && make install
-cd ${DOTPATH} && make deploy
+cd "${DOTPATH}" && make install
+cd "${DOTPATH}" && make deploy
 
 # TODO: x64向けanyenvのフォルダ作成
 # 再起動: exec $SHELL -l

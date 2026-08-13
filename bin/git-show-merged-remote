@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [ $# != 1 ]; then
-    echo 引数エラー: $*
+    echo "引数エラー: $*"
     exit 1
 fi
 

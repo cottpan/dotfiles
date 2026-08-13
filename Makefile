@@ -6,6 +6,9 @@ DOTFILES   := $(filter-out $(EXCLUSIONS), $(CANDIDATES))
 
 .DEFAULT_GOAL := help
 
+# test は test/ ディレクトリと名前が衝突するので、ファイル名ではないことを明示する
+.PHONY: all list install deploy clean help test test-syntax test-deploy test-runtime
+
 all:
 
 list: ## Show dot files in this repo
@@ -33,6 +36,18 @@ clean: ## Remove the dot files
 	@-$(foreach val, $(CONFIG_DIRS), rm -vrf $(HOME)/$(val);)
 	@echo 'Remove .zsh symlink...'
 	@-rm -vrf $(HOME)/.zsh
+
+test: ## Run all tests
+	@$(DOTPATH)/test/run
+
+test-syntax: ## Check the syntax of every script and config
+	@$(DOTPATH)/test/run syntax
+
+test-deploy: ## Deploy into a throwaway HOME and check the result
+	@$(DOTPATH)/test/run deploy
+
+test-runtime: ## Check that this machine actually works (PATH, tools, nvim, tmux)
+	@$(DOTPATH)/test/run runtime
 
 help: ## Self-documented Makefile
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \

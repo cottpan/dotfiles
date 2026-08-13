@@ -1,28 +1,60 @@
-# This is a basic workflow to help you get started with Actions
-
 name: CI
 
-# Controls when the action will run. Triggers the workflow on push or pull request
-# events but only for the master branch
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  ubuntu :
-    # The type of runner that the job will run on
-    runs-on: macos-latest
-    # Steps represent a sequence of tasks that will be executed as part of the job
+  # 構文チェックと、隔離した HOME へのデプロイ。macOS と Fedora の両方で回す
+  checks:
+    name: 静的チェックとデプロイ (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Fedora
+            os: ubuntu-latest
+            container: fedora:latest
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      # - name: Install required packages
-      #   run: apt-get update && apt-get install -y git sudo make
+      - name: 必要なコマンドを入れる (Fedora)
+        if: matrix.container != ''
+        run: dnf install -y git make zsh ShellCheck python3 file findutils
 
-      - name: Install dotfiles
+      - name: 必要なコマンドを入れる (macOS)
+        if: matrix.container == ''
+        run: brew install shellcheck
+
+      # コンテナ内は checkout の所有者と実行ユーザが異なり、git が警告を出して止まる
+      - name: リポジトリを git の安全なディレクトリに登録する
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: 構文チェック
+        run: make test-syntax
+
+      - name: デプロイ (隔離した HOME)
+        run: make test-deploy
+
+  # install.sh を最初から流して、出来上がった環境を確認する
+  provision:
+    name: install.sh と実行環境の確認 (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install.sh
         run: ./install.sh
+
+      # install.sh は CI ではプラグイン同期を飛ばすので、ここで明示的に流す
+      - name: Neovim のプラグインを同期
+        run: nvim --headless "+Lazy! sync" +qa
+
+      - name: 実行環境の確認
+        run: make test-runtime

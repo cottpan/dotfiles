@@ -1,0 +1,45 @@
+#!/usr/bin/env sh
+# dotfiles のテストを走らせる。
+#
+#   test/run              全部
+#   test/run syntax       構文チェックだけ
+#   test/run deploy       デプロイ (隔離した HOME) だけ
+#   test/run runtime      実行環境の確認だけ
+#
+# make test / make test-syntax などからも呼ばれる。
+# 道具が入っていない環境では該当項目を skip するので、CI の静的チェックだけの回でも通る。
+
+set -u
+
+DOTPATH=$(cd "$(dirname "$0")/.." && pwd -P)
+export DOTPATH
+
+. "$DOTPATH/test/lib.sh"
+
+run_suite() {
+    file="$DOTPATH/test/suite/$1"
+    if [ -f "$file" ]; then
+        # shellcheck source=/dev/null
+        . "$file"
+    else
+        fail "スイートが見つからない: $1"
+    fi
+}
+
+if [ $# -eq 0 ]; then
+    set -- syntax deploy runtime
+fi
+
+for target in "$@"; do
+    case $target in
+        syntax) run_suite 10-syntax.sh ;;
+        deploy) run_suite 20-deploy.sh ;;
+        runtime) run_suite 30-runtime.sh ;;
+        *)
+            printf '使い方: test/run [syntax|deploy|runtime]\n' >&2
+            exit 2
+            ;;
+    esac
+done
+
+summary
