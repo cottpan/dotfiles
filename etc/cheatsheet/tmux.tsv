@@ -1,0 +1,43 @@
+# section	keys	summary	detail	source
+基本	C-q	prefix (すべての操作はこれを押してから)	tmux の操作は prefix を押してから次のキーを押す。押している間だけ待ち受け状態になる。	custom
+基本	C-q ?	このチートシート		custom
+基本	C-q d	デタッチ (セッションは残る)	端末を閉じてもセッションは生き続ける。tmux a で戻れる。	builtin
+基本	C-q s	セッション一覧から選ぶ		builtin
+基本	C-q $	セッション名を変更		builtin
+基本	C-q :	tmux のコマンドを入力	list-keys など、キーに割り当てていない操作はここから。	builtin
+基本	C-q r	設定を読み直す	~/.tmux.conf を保存すると自動でも読み直される (entr 監視)。	custom
+基本	C-q C-q	直前のウィンドウへ戻る	prefix の二度押し。	custom
+ウィンドウ	C-q c	新しいウィンドウ	今いるディレクトリを引き継ぐ。	custom
+ウィンドウ	C-q C	作業ウィンドウを開く	エディタ + ターミナル + エージェントの3ペイン構成で開く。	custom
+ウィンドウ	C-q n / C-q p	次 / 前のウィンドウ		builtin
+ウィンドウ	C-q 1 .. C-q 9	番号でウィンドウ移動	番号は 1 始まり。	builtin
+ウィンドウ	C-q w	ウィンドウ一覧から選ぶ		builtin
+ウィンドウ	C-q ,	ウィンドウ名を変更	Claude Code のセッションでは最初の依頼から自動で名前が付く。	builtin
+ウィンドウ	C-q &	ウィンドウを閉じる	確認あり。	builtin
+ウィンドウ	C-q < / C-q >	ウィンドウを左 / 右へ移動	連打できる。	custom
+ウィンドウ	C-q f	ウィンドウを検索して移動		builtin
+ペイン	C-q |	左右に分割	今いるペインだけを分割。カレントパスを引き継ぐ。	custom
+ペイン	C-q -	上下に分割	今いるペインだけを分割。	custom
+ペイン	C-q \\ / C-q _	画面全体で左右 / 上下に分割	ペイン単位ではなくウィンドウ全体を分ける。押し間違えに注意。	custom
+ペイン	C-q h j k l	ペイン間を移動	vim と同じ向き。	custom
+ペイン	C-q H J K L	ペインの大きさを変える	連打できる。	custom
+ペイン	C-q z	ペインを最大化 / 戻す	最大化中はタブに虫眼鏡が出る。	builtin
+ペイン	C-q x	ペインを閉じる	確認あり。	builtin
+ペイン	C-q !	ペインを別ウィンドウに切り出す		builtin
+ペイン	C-q q	ペイン番号を表示	表示中に番号を押すとそのペインへ移動。	builtin
+ペイン	C-q o	次のペインへ		builtin
+ペイン	C-q space	レイアウトを切り替える		builtin
+コピー	C-q [	コピーモードに入る	スクロールや選択はこのモードで行う。q で抜ける。	builtin
+コピー	v	選択を開始 (コピーモード中)	vim と同じ操作感。	custom
+コピー	C-v	矩形選択に切り替え (コピーモード中)		custom
+コピー	y	選択範囲をコピー (コピーモード中)	システムのクリップボードに入る。	custom
+コピー	Enter	選択範囲をコピーして抜ける		custom
+コピー	C-q ]	貼り付け		builtin
+コピー	C-q y / C-q Y	コマンドライン / カレントパスをコピー		custom
+ポップアップ	C-q g	GitHub の未読通知	Enter でブラウザを開く。	custom
+ポップアップ	C-q a	今日の予定	Enter で会議 URL を開く。	custom
+ポップアップ	C-q v	Neovim のチートシート		custom
+セッション保存	C-q C-s	セッションを保存	ウィンドウ・ペイン構成を保存する (resurrect)。	custom
+セッション保存	C-q C-r	セッションを復元		custom
+プラグイン	C-q I	プラグインを導入	TPM。.tmux.conf に @plugin を足した後に押す。	custom
+プラグイン	C-q U	プラグインを更新		custom

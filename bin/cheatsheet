@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""tmux と Neovim のチートシートをポップアップで開く。
+
+    cheatsheet tmux      tmux のキー操作
+    cheatsheet nvim      Neovim のキー操作
+    cheatsheet tmux --list   一覧をそのまま出す (テスト用)
+
+内容は etc/cheatsheet/*.tsv に置いてある。列は
+「セクション / キー / 概要 / 詳細 / 出所(custom=この dotfiles で定義, builtin=標準)」。
+
+fzf があればセクション込みで絞り込めて、右側に詳細が出る。無ければ一覧を表示するだけ。
+"""
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unicodedata
+from pathlib import Path
+
+DOTPATH = Path(os.path.realpath(__file__)).parent.parent
+DATA_DIR = DOTPATH / "etc" / "cheatsheet"
+
+TITLES = {"tmux": "tmux", "nvim": "Neovim"}
+
+
+def have(command):
+    return any(
+        os.access(os.path.join(path, command), os.X_OK)
+        for path in os.environ.get("PATH", "").split(os.pathsep)
+        if path
+    )
+
+
+def display_width(text):
+    return sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in text)
+
+
+def pad(text, columns):
+    width = display_width(text)
+    if width > columns:
+        out = ""
+        acc = 0
+        for char in text:
+            step = 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+            if acc + step > columns - 1:
+                break
+            out += char
+            acc += step
+        return out + "…"
+    return text + " " * (columns - width)
+
+
+def load(target):
+    path = DATA_DIR / f"{target}.tsv"
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        fields = line.split("\t")
+        # detail と source は省略できる
+        fields += [""] * (5 - len(fields))
+        rows.append(fields[:5])
+    return rows
+
+
+def render(rows):
+    """一覧の行と、右側に出す詳細を作る。"""
+    items = []
+    for section, keys, summary, detail, source in rows:
+        line = f"{pad(section, 14)} {pad(keys, 22)} {summary}"
+        note = "この dotfiles で定義したキー" if source == "custom" else "Neovim / tmux の標準のキー"
+        text = f"[{section}]\n\n{keys}\n\n{summary}\n"
+        if detail:
+            text += f"\n{detail}\n"
+        text += f"\n---\n{note}\n"
+        items.append((line, text))
+    return items
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] not in TITLES:
+        print(__doc__)
+        return 2
+    target = sys.argv[1]
+    rows = load(target)
+    items = render(rows)
+
+    if "--list" in sys.argv or not have("fzf"):
+        print("\n".join(line for line, _ in items))
+        return 0
+
+    workdir = tempfile.mkdtemp(prefix="cheatsheet-")
+    try:
+        lines = []
+        for index, (line, text) in enumerate(items):
+            (Path(workdir) / str(index)).write_text(text, encoding="utf-8")
+            lines.append(f"{index}\t{line}")
+        subprocess.run(
+            [
+                "fzf",
+                "--delimiter", "\t",
+                "--with-nth", "2..",
+                "--prompt", f"{TITLES[target]} > ",
+                "--header", "キーやセクション名で絞り込み / Esc で閉じる",
+                "--preview", f"cat {workdir}/{{1}}",
+                "--preview-window", "right:45%,wrap",
+                "--reverse",
+                "--border",
+                "--no-sort",
+            ],
+            input="\n".join(lines) + "\n",
+            text=True,
+            check=False,
+        )
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

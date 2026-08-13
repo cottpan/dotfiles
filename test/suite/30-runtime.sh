@@ -166,6 +166,47 @@ else
     skip "tmux の設定値" "tmux が無い"
 fi
 
+# --- チートシート -----------------------------------------------------------
+
+for target in tmux nvim; do
+    if output=$("$DOTPATH/bin/cheatsheet" "$target" --list 2>&1) && [ -n "$output" ]; then
+        ok "チートシートが出る ($target)"
+    else
+        fail "チートシートが出る ($target)" "$output"
+    fi
+done
+
+# 列が欠けていないか (セクション・キー・概要は必須)
+if have python3; then
+    check "チートシートの表が壊れていない" python3 -c "
+import sys, pathlib
+for name in ('tmux', 'nvim'):
+    path = pathlib.Path('$DOTPATH/etc/cheatsheet/%s.tsv' % name)
+    for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+        if not line.strip() or line.startswith('#'):
+            continue
+        fields = line.split('\t')
+        if len(fields) < 3 or not all(fields[:3]):
+            sys.exit('%s:%d 列が足りない: %s' % (path.name, number, line))
+"
+else
+    skip "チートシートの表の検証" "python3 が無い"
+fi
+
+if have tmux; then
+    socket="dotfiles-test-cheat-$$"
+    tmux -L "$socket" -f "$DOTPATH/.tmux.conf" new-session -d -x 80 -y 24 2> /dev/null
+    assigned=$(tmux -L "$socket" list-keys -T prefix 2> /dev/null | grep -c "cheatsheet")
+    if [ "$assigned" -ge 2 ]; then
+        ok "チートシートのキーが割り当たっている (tmux / nvim)"
+    else
+        fail "チートシートのキーが割り当たっている (tmux / nvim)" "見つかった数: $assigned"
+    fi
+    tmux -L "$socket" kill-server 2> /dev/null || true
+else
+    skip "チートシートのキー割り当て" "tmux が無い"
+fi
+
 # --- bin のスモークテスト ---------------------------------------------------
 
 if have tmux; then
