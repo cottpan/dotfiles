@@ -1,6 +1,12 @@
 grapheme-width-method = legacy
 
+# tmux のステータスバーが Solarized の 256 色に合わせて組んであるので、
+# システムの外観に追従させず常に dark で固定する
+# (システムに合わせたいなら dark:"iTerm2 Solarized Dark",light:"iTerm2 Solarized Light")
+theme = "iTerm2 Solarized Dark"
+
 font-family = "Monaco"
 font-family = "Hiragino Sans"
 # Nerd Font のグリフ (tmux ステータスや nvim-web-devicons 用) だけをフォールバックで補う
 font-family = "Symbols Nerd Font Mono"
+font-size = 12
