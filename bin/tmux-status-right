@@ -410,12 +410,9 @@ def compose(results, icons, icons_plain):
     order = [name for name, _ in SEGMENTS]
     chosen.sort(key=lambda item: order.index(item[0]))
 
-    # クリックできるセグメント (tmux の range=user)。名前は 15 バイトまで
-    CLICKABLE = {"github": "gh", "calendar": "cal"}
-
     out = ""
     previous_bg = BAR_BG
-    for name, text, style in chosen:
+    for _, text, style in chosen:
         fg, bg = STYLES[style]
         if icons_plain:
             head = f"#[fg={fg},bg={bg}]{SEP_PLAIN}"
@@ -424,12 +421,7 @@ def compose(results, icons, icons_plain):
             head = f"#[fg=colour240,bg={bg}]{SEP_THIN}#[fg={fg},bg={bg}]"
         else:
             head = f"#[fg={bg},bg={previous_bg}]{SEP}#[fg={fg},bg={bg}]"
-        clickable = CLICKABLE.get(name)
-        if clickable:
-            # クリックすると MouseDown1Status が起き、mouse_status_range にこの名前が入る
-            out += f"#[range=user|{clickable}]{head} {text} #[norange]"
-        else:
-            out += f"{head} {text} "
+        out += f"{head} {text} "
         previous_bg = bg
     # 時計セグメントの手前まで。日付は曜日を英語で出したいのでここで組み立てる
     # (tmux 組み込みの strftime はサーバのロケールに従うため %a が「水」になる)
