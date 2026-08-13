@@ -11,10 +11,15 @@ tmux の display-popup から呼ばれる想定で、コマンドが終わると
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import unicodedata
+from pathlib import Path as pathlib_Path
 from datetime import datetime, timezone
+
+SELF = os.path.realpath(__file__)
 
 BROWSER_OPEN = "open" if sys.platform == "darwin" else "xdg-open"
 
@@ -69,21 +74,55 @@ def pause(message="\n閉じるには何かキーを押してください "):
         pass
 
 
-def choose(lines):
-    """fzf があれば選ばせて、選ばれた行を返す。無ければ表示するだけで None。"""
-    if not lines:
+def choose(items, prompt, header):
+    """fzf で選ばせる。右側に詳細を出す (fprwtree と同じ見せ方)。
+
+    items は (表示行, 詳細テキスト, URL) の並び。fzf が無ければ一覧を出すだけ。
+    戻り値は選ばれた項目の URL。
+    """
+    if not items:
         return None
     if not have("fzf"):
-        print("\n".join(lines))
+        print("\n".join(line for line, _, _ in items))
         pause()
         return None
-    out = run(
-        ["fzf", "--ansi", "--no-sort", "--reverse", "--prompt", "> ", "--header",
-         "Enter でブラウザを開く / Esc で閉じる"],
-        timeout=600,
-        stdin_text="\n".join(lines) + "\n",
-    )
-    return out.strip() if out else None
+
+    # 詳細はファイルに書いておき、プレビューは cat するだけにする (待ちを作らない)
+    workdir = tempfile.mkdtemp(prefix="tmux-status-popup-")
+    try:
+        lines = []
+        for index, (line, detail, url) in enumerate(items):
+            base = pathlib_Path(workdir) / str(index)
+            base.write_text(detail, encoding="utf-8")
+            # GitHub は本文をプレビュー時に取りに行く (件数分の API 呼び出しを避ける)
+            if url and url.startswith("https://api.github.com/"):
+                base.with_suffix(".url").write_text(url, encoding="utf-8")
+            lines.append(f"{index}\t{line}")
+
+        out = run(
+            [
+                "fzf",
+                "--delimiter", "\t",
+                "--with-nth", "2..",
+                "--prompt", prompt,
+                "--header", header,
+                "--preview", f"cat {workdir}/{{1}}; {SELF} --detail {workdir} {{1}}",
+                "--preview-window", "right:60%",
+                "--reverse",
+                "--border",
+                "--no-sort",
+            ],
+            timeout=600,
+            stdin_text="\n".join(lines) + "\n",
+        )
+        if not out:
+            return None
+        index = out.split("\t", 1)[0].strip()
+        if not index.isdigit() or int(index) >= len(items):
+            return None
+        return items[int(index)][2]
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
 
 
 def open_url(url):
@@ -128,28 +167,32 @@ def github():
         pause()
         return 0
 
-    lines = []
-    urls = {}
+    entries = []
     for item in items:
         repo = (item.get("repository") or {}).get("full_name", "")
         subject = item.get("subject") or {}
         title = subject.get("title", "")
+        kind = subject.get("type", "")
         reason = item.get("reason", "")
-        age = relative_time(item.get("updated_at", ""))
+        updated = item.get("updated_at", "")
+        age = relative_time(updated)
         line = f"{pad(repo, 28)} {pad(title, 52)} {pad(reason, 14)} {age}"
-        lines.append(line)
-        urls[line] = subject.get("url") or ""
+        detail = (
+            f"リポジトリ : {repo}\n"
+            f"種別       : {kind}\n"
+            f"理由       : {reason}\n"
+            f"更新       : {updated} ({age})\n"
+            f"\nタイトル\n{title}\n"
+        )
+        entries.append((line, detail, subject.get("url") or ""))
 
-    selected = choose(lines)
+    selected = choose(entries, "通知 > ", "Enter でブラウザを開く / Esc で閉じる")
     if not selected:
         return 0
 
-    api_url = urls.get(selected, "")
-    if not api_url:
-        return 0
     # subject.url は API のアドレスなので、ブラウザ用の URL を引き直す
-    detail = run(["gh", "api", api_url, "--jq", ".html_url"], timeout=30)
-    open_url((detail or "").strip())
+    html = run(["gh", "api", selected, "--jq", ".html_url"], timeout=30)
+    open_url((html or "").strip())
     return 0
 
 
@@ -181,8 +224,7 @@ def calendar():
         return 0
 
     now = datetime.now()
-    lines = []
-    urls = {}
+    entries = []
     seen = set()
     for block in out.split("@@"):
         if not block.strip():
@@ -223,21 +265,57 @@ def calendar():
 
         link = " [link]" if meeting else ""
         line = f"{marker} {pad(span, 12)} {pad(title, 46)}{link}"
-        lines.append(line)
-        urls[line] = meeting
 
-    if not lines:
+        state = {">": "進行中", "-": "終了"}.get(marker, "これから")
+        # notes には Google Meet の案内などが入るので、そのまま読めるよう整形する
+        notes = re.sub(r"<[^>]+>", "", body).replace(";;", "\n").strip()
+        notes = re.sub(r"\n{3,}", "\n\n", notes)
+        detail = (
+            f"予定   : {title}\n"
+            f"時間   : {span}\n"
+            f"状態   : {state}\n"
+            + (f"会議室 : {meeting}\n" if meeting else "")
+            + (f"\n--- メモ ---\n{notes[:1500]}\n" if notes else "")
+        )
+        entries.append((line, detail, meeting))
+
+    if not entries:
         print("今日の予定はありません")
         pause()
         return 0
 
-    selected = choose(lines)
-    if selected:
-        open_url(urls.get(selected, ""))
+    open_url(choose(entries, "予定 > ", "Enter で会議 URL を開く / Esc で閉じる"))
+    return 0
+
+
+def detail(workdir, index):
+    """プレビューから呼ばれ、GitHub の本文だけ遅れて表示する。
+
+    件数分の API 呼び出しを避けるため、見ている項目だけ取りに行って結果を残す。
+    """
+    base = pathlib_Path(workdir) / str(index)
+    cached = base.with_suffix(".body")
+    if cached.exists():
+        sys.stdout.write(cached.read_text(encoding="utf-8"))
+        return 0
+    url_file = base.with_suffix(".url")
+    if not url_file.exists():
+        return 0
+    api_url = url_file.read_text(encoding="utf-8").strip()
+    out = run(
+        ["gh", "api", api_url, "--jq",
+         '"状態   : " + (.state // "-") + "\n作成者 : " + (.user.login // "-") + "\n\n--- 本文 ---\n" + ((.body // "") | .[0:1500])'],
+        timeout=20,
+    )
+    text = f"\n{out}" if out else ""
+    cached.write_text(text, encoding="utf-8")
+    sys.stdout.write(text)
     return 0
 
 
 def main():
+    if len(sys.argv) >= 4 and sys.argv[1] == "--detail":
+        return detail(sys.argv[2], sys.argv[3])
     if len(sys.argv) < 2:
         print(__doc__)
         return 2
