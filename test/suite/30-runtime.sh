@@ -204,7 +204,7 @@ if have tmux; then
     fi
 
     # ポップアップで開くもの (通知 / 予定 / Claude)
-    for popup in tmux-status-popup CLAUDE_POPUP_COMMAND; do
+    for popup in tmux-status-popup tmux-claude-scratch; do
         if tmux -L "$socket" list-keys -T prefix 2> /dev/null | grep -q "$popup"; then
             ok "ポップアップのキーが割り当たっている ($popup)"
         else
