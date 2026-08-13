@@ -79,7 +79,8 @@ STYLES = {
     "claude_stale": ("colour240", "colour236"),
     "github": ("colour136", "colour238"),
     "calendar": ("colour37", "colour238"),
-    "calendar_now": ("colour160", "colour238"),  # 進行中は赤で目立たせる
+    # 進行中は反転させる。暗い背景に暗い赤 (colour160) だとコントラストが 1.8 しかなく読めない
+    "calendar_now": ("colour235", "colour203"),
     "clock": ("colour235", "colour136"),
 }
 

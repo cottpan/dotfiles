@@ -1,0 +1,45 @@
+#!/usr/bin/env sh
+# ポップアップから Claude に繋ぐ。セッションは残したまま隠せるようにする。
+#
+# display-popup で claude を直接動かすと、閉じる = 終了になってしまう。
+# 専用のセッションを立ててそこに attach する形にすると、detach するだけで
+# ポップアップが閉じ、会話はそのまま残る。次に開くと続きから使える。
+#
+# 隠すのは .tmux.conf 側の bind (同じキーで detach-client) が担当する。
+
+set -eu
+
+session=${TMUX_CLAUDE_SESSION:-_claude}
+command=${CLAUDE_POPUP_COMMAND:-claude}
+
+# $TMUX は "ソケット,PID,セッション番号"。入れ子で繋ぐときに TMUX を外すので、
+# どのサーバだったかをここで控えておく (外すと既定のソケットを見に行ってしまう)
+socket=""
+if [ -n "${TMUX:-}" ]; then
+    socket=${TMUX%%,*}
+fi
+
+tmux_cmd() {
+    if [ -n "$socket" ]; then
+        tmux -S "$socket" "$@"
+    else
+        tmux "$@"
+    fi
+}
+
+if ! tmux_cmd has-session -t "=$session" 2> /dev/null; then
+    # ウィンドウ名を付けるフックは止める (この場限りの質問で名前が変わると困る)
+    tmux_cmd new-session -d -s "$session" -e CLAUDE_TMUX_TITLE_SKIP=1 "$command"
+    # set-option は "=" 付きのセッション指定を受け付けないので、そのまま渡す
+    # ポップアップの中に status 行は要らない
+    tmux_cmd set-option -t "$session" status off
+    # 隠している間 (detach 中) もセッションを残す
+    tmux_cmd set-option -t "$session" destroy-unattached off
+fi
+
+# 同じサーバへの入れ子になるので、TMUX を外してから繋ぐ
+unset TMUX
+if [ -n "$socket" ]; then
+    exec tmux -S "$socket" attach-session -t "=$session"
+fi
+exec tmux attach-session -t "=$session"
