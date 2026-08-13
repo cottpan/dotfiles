@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Claude Code のイベントに合わせて通知音を鳴らす (Muxy の通知音の代替)。
+#
+# hook の command から `claude-notify <event>` の形で呼ぶ:
+#
+#   stop                完了              Glass
+#   notification        入力待ち/許可待ち  Ping
+#   permission-request  許可ダイアログ     Ping
+#   stop-failure        失敗              Basso
+#
+# afplay を直接呼ぶので端末に一切依存しない。Ghostty でも Terminal.app でも
+# tmux 越しでも同じように鳴る (端末のベル設定・OSC 通知対応を問わない)。
+
+set -u
+
+case "${1:-}" in
+stop) sound=Glass ;;
+notification | permission-request) sound=Ping ;;
+stop-failure) sound=Basso ;;
+*) exit 0 ;;
+esac
+
+file="/System/Library/Sounds/${sound}.aiff"
+[ -r "$file" ] || exit 0
+
+# 許可ダイアログでは PermissionRequest と Notification の両方が飛んでくるので、
+# 同じ音が二重に鳴らないよう直近 2 秒は抑制する
+guard="${TMPDIR:-/tmp}/claude-notify-${sound}"
+now=$(date +%s)
+if [ -e "$guard" ]; then
+	last=$(stat -f %m "$guard" 2>/dev/null || echo 0)
+	[ $((now - last)) -lt 2 ] && exit 0
+fi
+: >"$guard"
+
+# hook の完了を待たせないよう再生は投げっぱなしにする
+# (nohup は hook プロセス終了時の SIGHUP で音が途切れるのを防ぐ)
+nohup afplay "$file" >/dev/null 2>&1 &
+
+# 通知センターにもバナーを出したい場合は次の 2 行のコメントを外す
+# (バンドル ID は使っている端末に合わせる。Terminal.app なら com.apple.Terminal)
+# nohup terminal-notifier -title "Claude Code" -message "$1" \
+# 	-activate com.mitchellh.ghostty -sender com.mitchellh.ghostty >/dev/null 2>&1 &
+
+exit 0
