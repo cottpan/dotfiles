@@ -1,0 +1,52 @@
+# section	keys	summary	detail	source
+モード	i / a	入力を始める (カーソル前 / 後)	Neovim は「入力モード」と「操作モード」が分かれている。Esc で操作モードに戻る。	builtin
+モード	o / O	下 / 上に行を足して入力		builtin
+モード	v / V / C-v	選択 (文字 / 行 / 矩形)		builtin
+モード	Esc	操作モードに戻る	迷ったらまず Esc。	builtin
+モード	:	コマンドを打つ	:w や :q はここから。	builtin
+保存と終了	:w	保存		builtin
+保存と終了	:q	閉じる	変更があると閉じられない。	builtin
+保存と終了	:wq / ZZ	保存して閉じる		builtin
+保存と終了	:q!	保存せずに閉じる		builtin
+移動	h j k l	左 下 上 右	連打すると加速する (accelerated-jk)。	builtin
+移動	w / b	次 / 前の単語へ		builtin
+移動	0 / $	行頭 / 行末へ		builtin
+移動	gg / G	ファイルの先頭 / 末尾へ		builtin
+移動	C-d / C-u	半画面ずつスクロール		builtin
+移動	%	対応する括弧へ		builtin
+移動	C-h / C-l	左 / 右のウィンドウへ		custom
+編集	x / dd	1文字 / 1行を削除	削除した内容はレジスタに入るので p で貼れる。	builtin
+編集	yy / p	1行コピー / 貼り付け		builtin
+編集	u / C-r	取り消し / やり直し		builtin
+編集	cw / ciw	単語を書き換える	ciw はカーソルがある単語全体。	builtin
+編集	.	直前の変更を繰り返す	覚えると効率が上がる。	builtin
+編集	>> / <<	インデントを深く / 浅く		builtin
+検索	/	検索	n で次、N で前。	builtin
+検索	*	カーソル位置の単語を検索		builtin
+検索	Esc Esc	検索のハイライトを消す		custom
+検索	:%s/old/new/g	ファイル全体を置換	確認しながらなら末尾に c を付ける。	builtin
+ファイル	Space e	ファイルツリーを開閉	ツリー内で ? を押すと操作一覧が出る。	custom
+ファイル	Space o	ファイルツリーにフォーカス		custom
+ファイル	Space ff	ファイルを名前で探す		custom
+ファイル	Space fg	ファイルの中身を検索	ripgrep で全文検索。	custom
+ファイル	Space fb	開いているバッファ一覧		custom
+ファイル	Space fh	ヘルプを検索		custom
+コード	gd	定義へ飛ぶ		custom
+コード	gr	参照を一覧		custom
+コード	K	カーソル位置の説明を出す		custom
+コード	Space rn	名前を変更 (リネーム)	参照している箇所もまとめて変わる。	custom
+コード	Space ca	コードアクション (自動修正など)		custom
+コード	Space f	ファイルを整形		custom
+コード	Space gd / gr / gi / gy	定義・参照をプレビュー付きで見る	Glance。飛ばずに中身を確認したい時。	custom
+コード	Space ss / Space sw	シンボルを絞り込んで移動	Namu。関数や変数の一覧から飛ぶ。	custom
+コード	Space ;	パンくずから選んで移動	dropbar。画面上部のパス表示から。	custom
+診断	C-j / C-k	次 / 前の警告・エラーへ		custom
+診断	Space d	カーソル位置の診断を詳しく出す		custom
+診断	Space fd	診断の一覧を検索		custom
+Git	]c / [c	次 / 前の変更箇所へ		custom
+Git	Space hp	変更箇所の差分を見る		custom
+Git	Space hs / Space hr	変更箇所をステージ / 取り消し		custom
+Git	Space hb	その行のコミットを詳しく見る	行末に出ている blame の詳細版。	custom
+Git	Space tb	行ごとの blame 表示を切り替え		custom
+折りたたみ	za	折りたたみを開閉		builtin
+折りたたみ	zR / zM	すべて開く / すべて閉じる		custom
