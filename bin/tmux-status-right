@@ -3,7 +3,7 @@
 
 macOS のメニューバー相当の情報を出す:
 
-    予定 (icalBuddy) / GitHub 通知 (gh) / Claude Code の使用量 / CPU・メモリ
+    予定 (icalBuddy) / GitHub 通知 (gh) / Claude Code の使用量 / バッテリー / ネットワーク
 
 status-interval が短いので、status-right から直接叩くと毎秒コマンドが走る。
 このスクリプトを `--daemon` で常駐させ、項目ごとの間隔で更新した結果を
@@ -34,7 +34,7 @@ RUNCAT_USAGE = Path.home() / ".claude" / "runcat-usage.json"
 RUNCAT_STALE_SEC = 60 * 60
 
 # 更新間隔 (秒)
-INTERVALS = {"calendar": 60, "github": 60, "claude": 20, "sys": 5}
+INTERVALS = {"calendar": 60, "github": 60, "claude": 20, "battery": 30, "network": 30}
 
 # Nerd Font のグリフ。豆腐になる環境では tmux 側で
 # `set -g @status-icons plain` にするとテキスト表記に切り替わる
@@ -43,8 +43,12 @@ ICONS = {
     "meeting": "\uf03d",  # nf-fa-video_camera (進行中の MTG)
     "github": "\uf0f3",  # nf-fa-bell
     "claude": "\uf069",  # nf-fa-asterisk (Claude のマークに近い六方の星)
-    "cpu": "\uf085",  # nf-fa-cogs
-    "mem": "\uf1c0",  # nf-fa-database
+    # nf-fa-battery-full / three-quarters / half / quarter / empty
+    "battery": ["\uf240", "\uf241", "\uf242", "\uf243", "\uf244"],
+    "battery_charging": "\uf0e7",  # nf-fa-bolt
+    "wifi": "\uf1eb",  # nf-fa-wifi
+    "wired": "\uf0e8",  # nf-fa-sitemap
+    "offline": "\uf00d",  # nf-fa-close
     "clock": "\uf017",  # nf-fa-clock_o
 }
 PLAIN_ICONS = {
@@ -52,8 +56,11 @@ PLAIN_ICONS = {
     "meeting": "NOW",
     "github": "GH",
     "claude": "CC",
-    "cpu": "CPU",
-    "mem": "MEM",
+    "battery": "BAT",
+    "battery_charging": "BAT+",
+    "wifi": "WIFI",
+    "wired": "NET",
+    "offline": "OFF",
     "clock": "",
 }
 
@@ -64,7 +71,10 @@ SEP_PLAIN = "|"
 # Solarized dark 寄りの配色 (既存の .tmux.conf に合わせる)
 BAR_BG = "colour235"
 STYLES = {
-    "sys": ("colour245", "colour236"),
+    "network": ("colour64", "colour236"),
+    "network_off": ("colour240", "colour236"),
+    "battery": ("colour245", "colour236"),
+    "battery_low": ("colour160", "colour236"),
     "claude": ("colour166", "colour236"),  # Claude はブランド色に合わせてオレンジ
     "claude_stale": ("colour240", "colour236"),
     "github": ("colour136", "colour238"),
@@ -256,69 +266,105 @@ def segment_claude(icons):
     return f"{icons['claude']} {value}", style
 
 
-def _sys_macos():
-    cpu = None
-    out = run(["top", "-l", "1", "-n", "0"], timeout=10)
-    if out:
-        match = re.search(r"CPU usage:.*?([\d.]+)%\s+idle", out)
-        if match:
-            cpu = 100.0 - float(match.group(1))
-
-    mem = None
-    out = run(["memory_pressure"], timeout=10)
-    if out:
-        match = re.search(r"free percentage:\s*(\d+)%", out)
-        if match:
-            mem = 100 - int(match.group(1))
-    return cpu, mem
+def _battery_macos():
+    """(残量%, 充電中か) を返す。バッテリーが無ければ (None, False)。"""
+    out = run(["pmset", "-g", "batt"], timeout=10)
+    if not out:
+        return None, False
+    match = re.search(r"(\d+)%;\s*([a-z ]+)", out)
+    if not match:
+        return None, False
+    percent = int(match.group(1))
+    state = match.group(2).strip()
+    # charged / charging / discharging / AC attached
+    return percent, state in ("charging", "charged", "AC attached", "finishing charge")
 
 
-def _sys_linux():
-    cpu = None
-    try:
-        def sample():
-            with open("/proc/stat", encoding="utf-8") as handle:
-                parts = [float(value) for value in handle.readline().split()[1:]]
-            return sum(parts), parts[3]
-
-        total1, idle1 = sample()
-        time.sleep(0.2)
-        total2, idle2 = sample()
-        if total2 > total1:
-            cpu = (1 - (idle2 - idle1) / (total2 - total1)) * 100
-    except (OSError, IndexError, ValueError):
-        pass
-
-    mem = None
-    try:
-        info = {}
-        with open("/proc/meminfo", encoding="utf-8") as handle:
-            for line in handle:
-                key, _, value = line.partition(":")
-                info[key] = float(value.split()[0])
-        if info.get("MemTotal"):
-            mem = (1 - info.get("MemAvailable", 0) / info["MemTotal"]) * 100
-    except (OSError, ValueError):
-        pass
-    return cpu, mem
+def _battery_linux():
+    base = Path("/sys/class/power_supply")
+    for name in ("BAT0", "BAT1", "BATT"):
+        target = base / name
+        if not target.is_dir():
+            continue
+        try:
+            percent = int((target / "capacity").read_text().strip())
+            status = (target / "status").read_text().strip()
+        except (OSError, ValueError):
+            continue
+        return percent, status in ("Charging", "Full")
+    return None, False
 
 
-def segment_sys(icons):
-    """CPU 使用率とメモリ使用率。"""
-    cpu, mem = _sys_macos() if sys.platform == "darwin" else _sys_linux()
-    parts = []
-    if cpu is not None:
-        parts.append(f"{icons['cpu']} {cpu:.0f}%")
-    if mem is not None:
-        parts.append(f"{icons['mem']} {mem:.0f}%")
-    if not parts:
+def segment_battery(icons):
+    """バッテリー残量。デスクトップなど電池が無い環境では出さない。"""
+    percent, charging = _battery_macos() if sys.platform == "darwin" else _battery_linux()
+    if percent is None:
         return None
-    return " ".join(parts), "sys"
+
+    if charging:
+        icon = icons["battery_charging"]
+    else:
+        # 残量に応じてアイコンを変える
+        level = min(4, max(0, percent // 25))
+        icon = icons["battery"][4 - level] if isinstance(icons["battery"], list) else icons["battery"]
+
+    style = "battery"
+    if percent <= 20 and not charging:
+        style = "battery_low"
+    return f"{icon} {percent}%", style
+
+
+def _network_macos():
+    """(種別, 表示名) を返す。種別は wifi / wired / none。"""
+    out = run(["route", "-n", "get", "default"], timeout=5)
+    device = None
+    if out:
+        match = re.search(r"interface:\s*(\S+)", out)
+        if match:
+            device = match.group(1)
+    if not device:
+        return "none", ""
+
+    # Wi-Fi のデバイス名を調べて、デフォルト経路がそれなら SSID を引く
+    ports = run(["networksetup", "-listallhardwareports"], timeout=10) or ""
+    wifi_devices = re.findall(r"Hardware Port: Wi-Fi\s*\nDevice:\s*(\S+)", ports)
+    if device in wifi_devices:
+        ssid = run(["networksetup", "-getairportnetwork", device], timeout=10) or ""
+        match = re.search(r"Current Wi-Fi Network:\s*(.+)", ssid)
+        # 位置情報の許可が無いと SSID を取れないことがある。その時は種別だけ出す
+        return "wifi", match.group(1).strip() if match else "Wi-Fi"
+    return "wired", device
+
+
+def _network_linux():
+    out = run(["ip", "route", "get", "1.1.1.1"], timeout=5)
+    device = None
+    if out:
+        match = re.search(r"\bdev\s+(\S+)", out)
+        if match:
+            device = match.group(1)
+    if not device:
+        return "none", ""
+
+    if Path(f"/sys/class/net/{device}/wireless").exists():
+        ssid = (run(["iwgetid", "-r"], timeout=5) or "").strip()
+        return "wifi", ssid or "Wi-Fi"
+    return "wired", device
+
+
+def segment_network(icons):
+    """今つながっている経路。Wi-Fi なら SSID、有線ならインターフェース名。"""
+    kind, label = _network_macos() if sys.platform == "darwin" else _network_linux()
+    if kind == "none":
+        return f"{icons['offline']} offline", "network_off"
+    icon = icons["wifi"] if kind == "wifi" else icons["wired"]
+    return f"{icon} {truncate(label, 16)}", "network"
 
 
 # 優先度の低い順。幅が足りないときは先頭から落とす
 SEGMENTS = [
-    ("sys", segment_sys),
+    ("network", segment_network),
+    ("battery", segment_battery),
     ("claude", segment_claude),
     ("github", segment_github),
     ("calendar", segment_calendar),
