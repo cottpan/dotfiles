@@ -133,6 +133,14 @@ else
     skip "TOML 構文 .config/mise/config.toml" "python3 が無い"
 fi
 
+# ダッシュボードの設定 (YAML)。PyYAML は標準では入っていないので、あるときだけ見る
+if have python3 && python3 -c "import yaml" 2> /dev/null; then
+    check "YAML 構文 .config/wtf/config.yml" python3 -c \
+        "import yaml; yaml.safe_load(open('$DOTPATH/.config/wtf/config.yml', encoding='utf-8'))"
+else
+    skip "YAML 構文 .config/wtf/config.yml" "PyYAML が無い"
+fi
+
 # ShellCheck は入っていれば走らせる (必須にはしない)
 if have shellcheck; then
     for file in $(script_files); do

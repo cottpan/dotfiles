@@ -65,7 +65,7 @@ for cmd in zsh git make nvim tmux; do
 done
 
 # 各機能が要求するもの (無ければ機能が黙って落ちるので警告として見せる)
-for cmd in rg fd jq gh entr python3 tree-sitter; do
+for cmd in rg fd jq gh entr python3 tree-sitter wtfutil; do
     if have "$cmd"; then
         ok "$cmd が入っている"
     else
@@ -155,6 +155,13 @@ if have tmux; then
         ok "send-prefix が割り当てられていない"
     fi
 
+    # ダッシュボードに d を使ったので、デタッチが D に残っていること
+    if tmux -L "$socket" list-keys -T prefix 2> /dev/null | grep -q "prefix *D *detach-client"; then
+        ok "デタッチが D に割り当たっている"
+    else
+        fail "デタッチが D に割り当たっている" "$(tmux -L "$socket" list-keys -T prefix | grep detach-client)"
+    fi
+
     term=$(tmux -L "$socket" show-options -gv default-terminal 2> /dev/null)
     if [ "$term" = "tmux-256color" ]; then
         ok "default-terminal が tmux-256color"
@@ -203,8 +210,8 @@ if have tmux; then
         fail "チートシートのキーが割り当たっている (tmux / nvim)" "見つかった数: $assigned"
     fi
 
-    # ポップアップで開くもの (通知 / 予定 / Claude)
-    for popup in tmux-status-popup tmux-claude-scratch; do
+    # ポップアップで開くもの (ダッシュボード / Claude)
+    for popup in tmux-dashboard tmux-claude-scratch; do
         if tmux -L "$socket" list-keys -T prefix 2> /dev/null | grep -q "$popup"; then
             ok "ポップアップのキーが割り当たっている ($popup)"
         else
@@ -222,6 +229,115 @@ if have tmux; then
     check "tmux-workspace --help が動く" "$DOTPATH/bin/tmux-workspace" --help
 else
     skip "tmux-workspace --help" "tmux が無い"
+fi
+
+# ダッシュボードの設定の組み立て (wtfutil 本体は起動しない)。
+# 目印の行が repositories.local の中身に置き換わることを見る
+dash_repos=$(mktemp "${TMPDIR:-/tmp}/dotfiles-test-repos.XXXXXX") || dash_repos=""
+dash_cache=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-test-cache.XXXXXX") || dash_cache=""
+if [ -n "$dash_repos" ] && [ -n "$dash_cache" ]; then
+    # config.yml が使っているキーはすべて対応表に要る。ここが噛み合わないと
+    # パネルが黙って空になるので、テスト側も config.yml からキーを拾って書き出す
+    sed -n 's/^[[:space:]]*# __REPO:\([A-Za-z0-9_-]*\)__$/\1 = owner\/\1-example/p' \
+        "$DOTPATH/.config/wtf/config.yml" > "$dash_repos"
+    printf '# コメント行は無視される\n\n' >> "$dash_repos"
+    output=$(
+        WTF_CONFIG_SRC="$DOTPATH/.config/wtf/config.yml" \
+            WTF_REPOSITORIES_FILE="$dash_repos" \
+            XDG_CACHE_HOME="$dash_cache" \
+            "$DOTPATH/bin/tmux-dashboard" --config < /dev/null 2>&1
+    )
+    # 目印の行 (行全体が # __REPO:キー__) が残っていないことを見る。
+    # 冒頭の説明コメントにも同じ名前が出てくるので、素の grep では判定できない
+    if [ -f "$output" ] &&
+        grep -q -- "- owner/backend-example" "$output" &&
+        ! grep -qE '^[[:space:]]*# __REPO:' "$output" &&
+        ! grep -q "コメント行" "$output"; then
+        ok "tmux-dashboard がリポジトリ名を設定に差し込む"
+    else
+        fail "tmux-dashboard がリポジトリ名を設定に差し込む" "$output"
+    fi
+
+    # 対応表が足りないときは、黙って空のパネルにせずエラーで止まること
+    printf 'backend = owner/example\n' > "$dash_repos"
+    if output=$(
+        WTF_CONFIG_SRC="$DOTPATH/.config/wtf/config.yml" \
+            WTF_REPOSITORIES_FILE="$dash_repos" \
+            XDG_CACHE_HOME="$dash_cache" \
+            "$DOTPATH/bin/tmux-dashboard" --config < /dev/null 2>&1
+    ); then
+        fail "対応表にキーが無ければ失敗する" "エラーにならなかった: $output"
+    else
+        ok "対応表にキーが無ければ失敗する"
+    fi
+
+    # 対応表そのものが無いときも同じ
+    if output=$(
+        WTF_CONFIG_SRC="$DOTPATH/.config/wtf/config.yml" \
+            WTF_REPOSITORIES_FILE="$dash_cache/存在しない" \
+            XDG_CACHE_HOME="$dash_cache" \
+            "$DOTPATH/bin/tmux-dashboard" --config < /dev/null 2>&1
+    ); then
+        fail "対応表が無ければ失敗する" "エラーにならなかった: $output"
+    else
+        ok "対応表が無ければ失敗する"
+    fi
+    rm -f "$dash_repos"
+    rm -rf "$dash_cache"
+else
+    skip "tmux-dashboard の設定の組み立て" "一時ファイルを作れない"
+fi
+
+# 予定の素のテキスト出力 (ダッシュボードのパネルが読む)。
+# 入力を待つ実装に戻ったら気付けるよう、標準入力は閉じて呼ぶ
+if [ "$(uname)" = "Darwin" ] && have icalBuddy && have python3; then
+    if output=$("$DOTPATH/bin/tmux-status-popup" calendar --plain < /dev/null 2>&1); then
+        ok "tmux-status-popup calendar --plain が待たずに終わる"
+    else
+        fail "tmux-status-popup calendar --plain が待たずに終わる" "$output"
+    fi
+else
+    skip "tmux-status-popup calendar --plain" "macOS の icalBuddy が無い"
+fi
+
+# ダッシュボードのパネル (ステータスバーと同じデータを縦に開いて出す)。
+# データが無い環境でも「取れていません」と出して 0 で終わる作りなので、出力があることを見る
+if have python3; then
+    for panel in claude network; do
+        if output=$("$DOTPATH/bin/tmux-status-right" --panel "$panel" < /dev/null 2>&1) &&
+            [ -n "$output" ]; then
+            ok "tmux-status-right --panel $panel が出力を返す"
+        else
+            fail "tmux-status-right --panel $panel が出力を返す" "$output"
+        fi
+    done
+
+    # 知らない名前を黙って通すと、パネルが空のまま気付けない
+    if output=$("$DOTPATH/bin/tmux-status-right" --panel nope < /dev/null 2>&1); then
+        fail "知らないパネル名でエラーになる" "エラーにならなかった: $output"
+    else
+        ok "知らないパネル名でエラーになる"
+    fi
+
+    # 設定が呼んでいるパネルが実装されていること (config.yml と実装のずれを見る)
+    # パネル名は [a-z]* なので単語分割で回す。sed の結果を直接 for に渡すと
+    # while read を勧める指摘 (SC2013) が出るが、パイプにすると集計が
+    # サブシェルに閉じてしまうため、一度変数に受けてから回す
+    configured_panels=$(
+        sed -n 's/.*"--panel", "\([a-z]*\)".*/\1/p' "$DOTPATH/.config/wtf/config.yml"
+    )
+    missing=""
+    for panel in $configured_panels; do
+        "$DOTPATH/bin/tmux-status-right" --panel "$panel" > /dev/null 2>&1 < /dev/null ||
+            missing="$missing $panel"
+    done
+    if [ -z "$missing" ]; then
+        ok "config.yml が呼ぶパネルがすべて実装されている"
+    else
+        fail "config.yml が呼ぶパネルがすべて実装されている" "無いパネル:$missing"
+    fi
+else
+    skip "ダッシュボードのパネル" "python3 が無い"
 fi
 
 if have python3; then

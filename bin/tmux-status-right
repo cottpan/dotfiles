@@ -13,6 +13,9 @@ status-interval が短いので、status-right から直接叩くと毎秒コマ
                  run-shell -b '~/bin/tmux-status-right --daemon'
 
 時計は tmux 組み込みの strftime に任せる (毎秒更新のため)。
+
+同じデータをダッシュボード (prefix + d) のパネルにも使う。あちらは数行使えるので、
+`--panel claude` / `--panel network` で 1 回だけ縦に開いて出す。
 """
 
 import json
@@ -22,7 +25,8 @@ import subprocess
 import sys
 import time
 import unicodedata
-from datetime import datetime, timedelta
+import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "tmux-status"
@@ -125,6 +129,11 @@ def truncate(text, columns):
         out += char
         width += char_width
     return out + "…"
+
+
+def pad(text, columns):
+    """表示幅で数えて右を埋める (全角のラベルを縦に揃えるため)。"""
+    return text + " " * max(0, columns - display_width(text))
 
 
 def humanize(delta):
@@ -373,6 +382,167 @@ SEGMENTS = [
 
 
 # --------------------------------------------------------------------------
+# ダッシュボードのパネル (--panel)
+# --------------------------------------------------------------------------
+#
+# ステータスバーは 1 行に詰めるが、ダッシュボード (wtfutil の cmdrunner) は
+# 数行使える。同じデータを縦に開いて見せるのがここ。
+
+
+BAR_COLUMNS = 14
+
+# Anthropic のステータスページ (statuspage.io)。
+# status.anthropic.com は *.statuspage.io の証明書しか出さないため TLS の検証で落ちる。
+# statuspage 側のホスト名を直接叩く (2026-08-14 時点では向こうも障害として認識している)
+STATUS_URL = "https://anthropic.statuspage.io/api/v2/summary.json"
+
+# 状態を表す印。cmdrunner のパネルは色を付けられないので (tview のタグが
+# そのまま文字として出る) 、記号だけで見分ける
+COMPONENT_MARKS = {
+    "operational": "●",
+    "degraded_performance": "▲",
+    "partial_outage": "▲",
+    "major_outage": "✕",
+    "under_maintenance": "⚙",
+}
+INDICATOR_MARKS = {
+    "none": "●",
+    "minor": "▲",
+    "major": "✕",
+    "critical": "✕",
+    "maintenance": "⚙",
+}
+INCIDENT_LABELS = {
+    "investigating": "調査中",
+    "identified": "原因判明",
+    "monitoring": "経過観察",
+    "resolved": "解決",
+    "postmortem": "事後報告",
+}
+
+
+def bar(ratio):
+    """0.0-1.0 を ███░░░ のバーにする。"""
+    try:
+        filled = int(round(max(0.0, min(1.0, float(ratio))) * BAR_COLUMNS))
+    except (TypeError, ValueError):
+        filled = 0
+    return "█" * filled + "░" * (BAR_COLUMNS - filled)
+
+
+def panel_claude():
+    """Claude Code のレート制限を枠ごとにバーで出す。"""
+    try:
+        data = json.loads(RUNCAT_USAGE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        print("使用量がまだ取れていません")
+        return 0
+
+    lines = []
+    for metric in data.get("metrics") or []:
+        title = metric.get("title") or "-"
+        percent, _, reset = str(metric.get("formattedValue", "")).partition(" · ")
+        lines.append(f"{title:<3} {bar(metric.get('normalizedValue'))} {percent:>4}")
+        if reset:
+            # 幅の狭いパネルなので、リセットまでの時間は次の行に落とす
+            lines.append(f"    あと {reset}")
+    if not lines:
+        print("使用量がまだ取れていません")
+        return 0
+
+    updated = data.get("lastUpdatedDate")
+    if updated:
+        try:
+            # lastUpdatedDate は UTC
+            when = datetime.strptime(updated, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            local = when.astimezone()
+            age = datetime.now().astimezone() - local
+            mark = " (古い)" if age.total_seconds() > RUNCAT_STALE_SEC else ""
+            lines.append("")
+            lines.append(f"更新 {local:%H:%M} ({humanize(age)} 前){mark}")
+        except (ValueError, TypeError):
+            pass
+
+    print("\n".join(lines))
+    return 0
+
+
+def local_address():
+    """デフォルト経路のインターフェースに付いている IPv4。"""
+    if sys.platform == "darwin":
+        out = run(["route", "-n", "get", "default"], timeout=5) or ""
+        match = re.search(r"interface:\s*(\S+)", out)
+        if not match:
+            return None
+        address = run(["ipconfig", "getifaddr", match.group(1)], timeout=5)
+        return address.strip() if address else None
+    out = run(["ip", "-4", "route", "get", "1.1.1.1"], timeout=5) or ""
+    match = re.search(r"\bsrc\s+(\S+)", out)
+    return match.group(1) if match else None
+
+
+def panel_network():
+    """今つながっている経路と IP。"""
+    kind, label = _network_macos() if sys.platform == "darwin" else _network_linux()
+    if kind == "none":
+        print("オフライン")
+        return 0
+
+    lines = [pad("Wi-Fi" if kind == "wifi" else "有線", 7) + label]
+    address = local_address()
+    if address:
+        lines.append(pad("IP", 7) + address)
+    print("\n".join(lines))
+    return 0
+
+
+def fetch_json(url, timeout=10):
+    """GET して JSON を返す。取れなければ None (パネルは黙って落ちない)。"""
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "tmux-status-right"})
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def panel_anthropic():
+    """Anthropic (Claude) のステータスページ。全体 + コンポーネント + 進行中の障害。"""
+    data = fetch_json(STATUS_URL)
+    if not data:
+        print("ステータスを取れません (ネットワークを確認してください)")
+        return 0
+
+    status = data.get("status") or {}
+    mark = INDICATOR_MARKS.get(status.get("indicator"), "?")
+    lines = [f"{mark} {status.get('description') or '不明'}", ""]
+
+    for component in data.get("components") or []:
+        mark = COMPONENT_MARKS.get(component.get("status"), "?")
+        # "Claude API (api.anthropic.com)" の括弧は落として詰める
+        name = re.sub(r"\s*\(.*\)\s*$", "", component.get("name") or "")
+        state = "" if component.get("status") == "operational" else f"  {component.get('status')}"
+        lines.append(f"{mark} {name}{state}")
+
+    incidents = data.get("incidents") or []
+    if incidents:
+        lines.append("")
+        for incident in incidents[:3]:
+            label = INCIDENT_LABELS.get(incident.get("status"), incident.get("status") or "-")
+            lines.append(f"▲ {label}: {truncate(incident.get('name') or '', 34)}")
+
+    print("\n".join(lines))
+    return 0
+
+
+PANELS = {
+    "anthropic": panel_anthropic,
+    "claude": panel_claude,
+    "network": panel_network,
+}
+
+
+# --------------------------------------------------------------------------
 # 組み立て
 # --------------------------------------------------------------------------
 
@@ -473,6 +643,15 @@ def already_running():
 
 
 def main():
+    # ダッシュボードのパネルは 1 回出して終わる (常駐もキャッシュもしない)
+    if "--panel" in sys.argv:
+        index = sys.argv.index("--panel")
+        name = sys.argv[index + 1] if len(sys.argv) > index + 1 else ""
+        if name not in PANELS:
+            print(f"不明なパネル: {name or '(未指定)'} (使えるのは {', '.join(sorted(PANELS))})")
+            return 2
+        return PANELS[name]()
+
     once = "--once" in sys.argv
     if not once:
         if already_running():

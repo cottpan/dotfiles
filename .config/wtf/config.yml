@@ -1,0 +1,189 @@
+# ダッシュボード (wtfutil) の設定。bin/tmux-dashboard が --config で読ませる。
+#
+#   ┌ 今日の予定 ────┬ backend ──────┬ 天気 ────┐
+#   │ > 14:00 1on1   │ PR / レビュー  │ ☁ +27°C  │
+#   │                │                ├ Power ───┤
+#   ├ Anthropic ─────┼ frontend ─────┤ 100% AC  │
+#   │ ● claude.ai    │                ├ Network ─┤
+#   │ ● Claude Code  ├ infra ────────┤ Wi-Fi    │
+#   │ ▲ 調査中: …    │                ├ Claude ──┤
+#   │                │                │ 5h ██ 23%│
+#   └────────────────┴────────────────┴──────────┘
+#
+# キー操作:
+#   C-c       いつでも閉じる     q    閉じる (フォーカスしていないときだけ)
+#   Tab       パネルを順に選ぶ   Esc  フォーカスを外す
+#   1 - 4     予定 / backend / frontend / infra を直接選ぶ
+#   C-r       全パネルを更新
+#   GitHub パネル (フォーカス中): j / k で項目を移動、Enter でブラウザ、/ でヘルプ
+#
+# リポジトリは 1 パネル 1 つ。名前は ~/.config/wtf/repositories.local の対応表から
+# 起動時に差し込む (下の # __REPO:backend__ のような行が置き換わる)。
+# dotfiles は公開リポジトリなので、業務のリポジトリ名はここに commit しない
+# (.gitignore で *.local を除外してある)。
+#
+# パネルを増やすときは
+#   1. repositories.local に `キー = owner/repo` を足す
+#   2. 下の github_* をまるごとコピーして名前・title・__REPO:キー__・position を変える
+#   3. grid の columns / rows と、隣のパネルの position を合わせる
+#
+# GitHub のトークンは設定に書かない。bin/tmux-dashboard が gh auth token を
+# WTF_GITHUB_TOKEN に入れて渡す (wtfutil 側が apiKey 未指定ならこれを見る)。
+wtf:
+  colors:
+    # 端末の背景をそのまま使う (Solarized Dark に合わせるため塗らない)
+    background: "default"
+    border:
+      focusable: gray
+      focused: cyan
+      normal: gray
+  grid:
+    # 負の値は「残りを比率で分ける」指定 (tview)。数字は取り分の重み。
+    # 固定幅にすると狭い端末で列が消えるので、比率で持たせる
+    # (予定 3 : GitHub 6 : 右の細物 2 。予定の行の詰め方は tmux-status-popup 側の clip)
+    columns: [-3, -6, -2]
+    rows: [-1, -1, -1, -1]
+  # 項目を開くときに使うコマンド (macOS)
+  openFileUtil: "open"
+  openUrlUtil: ["open"]
+  mods:
+    agenda:
+      type: cmdrunner
+      title: " 今日の予定 "
+      enabled: true
+      # 予定は icalBuddy 経由でローカルの Calendar.app から読む。
+      # Google の API も OAuth も使わないので、組織のアプリ制限に関係なく動く
+      # (wtfutil の gcal モジュールは GCP のクライアントシークレットが必要)
+      cmd: "~/bin/tmux-status-popup"
+      args: ["calendar", "--plain"]
+      refreshInterval: 300s
+      focusChar: 1
+      position:
+        top: 0
+        left: 0
+        height: 2
+        width: 1
+    anthropic:
+      type: cmdrunner
+      title: " Anthropic Status "
+      enabled: true
+      # anthropic.statuspage.io の API を読む。全体 + コンポーネント + 進行中の障害。
+      # (status.anthropic.com は *.statuspage.io の証明書しか出さないので使えない)
+      cmd: "~/bin/tmux-status-right"
+      args: ["--panel", "anthropic"]
+      refreshInterval: 300s
+      # 読むだけのパネルなので、フォーカスの対象からは外す
+      focusable: false
+      position:
+        top: 2
+        left: 0
+        height: 2
+        width: 1
+    github_backend:
+      type: github
+      title: " backend "
+      enabled: true
+      username: cottpan
+      showOpenReviewRequests: true
+      showMyPullRequests: true
+      # リポジトリの統計とマージ可否は 1 件ずつ API を叩くので出さない
+      showStats: false
+      enableStatus: false
+      refreshInterval: 300s
+      focusChar: 2
+      repositories:
+        # __REPO:backend__
+      # 一番動きが多いので 2 段ぶん取る
+      position:
+        top: 0
+        left: 1
+        height: 2
+        width: 1
+    github_frontend:
+      type: github
+      title: " frontend "
+      enabled: true
+      username: cottpan
+      showOpenReviewRequests: true
+      showMyPullRequests: true
+      showStats: false
+      enableStatus: false
+      refreshInterval: 300s
+      focusChar: 3
+      repositories:
+        # __REPO:frontend__
+      position:
+        top: 2
+        left: 1
+        height: 1
+        width: 1
+    github_infra:
+      type: github
+      title: " infra "
+      enabled: true
+      username: cottpan
+      showOpenReviewRequests: true
+      showMyPullRequests: true
+      showStats: false
+      enableStatus: false
+      refreshInterval: 300s
+      focusChar: 4
+      repositories:
+        # __REPO:infra__
+      position:
+        top: 3
+        left: 1
+        height: 1
+        width: 1
+    weather:
+      type: prettyweather
+      title: " 天気 "
+      enabled: true
+      # wttr.in を読むだけ。API キーは要らない
+      city: "Tokyo"
+      unit: "m"
+      view: "0"
+      language: "ja"
+      refreshInterval: 30m
+      position:
+        top: 0
+        left: 2
+        height: 1
+        width: 1
+    power:
+      type: power
+      title: " Power "
+      enabled: true
+      refreshInterval: 60s
+      position:
+        top: 1
+        left: 2
+        height: 1
+        width: 1
+    network:
+      type: cmdrunner
+      title: " Network "
+      enabled: true
+      cmd: "~/bin/tmux-status-right"
+      args: ["--panel", "network"]
+      refreshInterval: 300s
+      focusable: false
+      position:
+        top: 2
+        left: 2
+        height: 1
+        width: 1
+    claude:
+      type: cmdrunner
+      title: " Claude Code "
+      enabled: true
+      # ステータスバーと同じ ~/.claude/runcat-usage.json を読んでバーにする
+      cmd: "~/bin/tmux-status-right"
+      args: ["--panel", "claude"]
+      refreshInterval: 60s
+      focusable: false
+      position:
+        top: 3
+        left: 2
+        height: 1
+        width: 1

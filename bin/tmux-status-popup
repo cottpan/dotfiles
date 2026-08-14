@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""ステータスバーのセグメントをクリックしたときに開くポップアップ。
+"""GitHub 通知と今日の予定を一覧する (ポップアップ / ダッシュボードのパネル用)。
 
-    tmux-status-popup github     未読の GitHub 通知を一覧する
-    tmux-status-popup calendar   今日の予定を一覧する
+    tmux-status-popup github            未読の GitHub 通知を一覧する
+    tmux-status-popup calendar          今日の予定を一覧する
+    tmux-status-popup calendar --plain  今日の予定を素のテキストで出す
 
 fzf があれば選択して Enter でブラウザを開く。無ければ一覧を表示するだけ。
 tmux の display-popup から呼ばれる想定で、コマンドが終わるとポップアップも閉じる。
+
+--plain はダッシュボード (wtfutil の cmdrunner) から呼ばれる。あちらは出力を
+そのまま貼るだけなので、fzf も「閉じるには何かキーを」の待ちも挟まない。
 """
 
 import json
@@ -62,6 +66,11 @@ def pad(text, columns):
             acc += step
         return out + "…" + " " * max(0, columns - acc - 1)
     return text + " " * (columns - width)
+
+
+def clip(text, columns):
+    """pad と同じ数え方で切るが、右側は埋めない (幅の狭いパネル向け)。"""
+    return pad(text, columns).rstrip()
 
 
 def pause(message="\n閉じるには何かキーを押してください "):
@@ -201,10 +210,11 @@ def github():
 # --------------------------------------------------------------------------
 
 
-def calendar():
+def calendar(plain=False):
     if sys.platform != "darwin" or not have("icalBuddy"):
         print("icalBuddy が無いため予定を取得できません")
-        pause()
+        if not plain:
+            pause()
         return 1
 
     # イベントごとに @@ で始まり、最後の ;; の後ろに日時が来る。
@@ -220,11 +230,13 @@ def calendar():
     )
     if not out:
         print("今日の予定はありません")
-        pause()
+        if not plain:
+            pause()
         return 0
 
     now = datetime.now()
     entries = []
+    plain_lines = []
     seen = set()
     for block in out.split("@@"):
         if not block.strip():
@@ -265,6 +277,8 @@ def calendar():
 
         link = " [link]" if meeting else ""
         line = f"{marker} {pad(span, 12)} {pad(title, 46)}{link}"
+        # ダッシュボードのパネルは狭いので、そちら用に詰めた行も作る
+        plain_line = f"{marker} {pad(span, 12)} {clip(title, 24)}{link}"
 
         state = {">": "進行中", "-": "終了"}.get(marker, "これから")
         # notes には Google Meet の案内などが入るので、そのまま読めるよう整形する
@@ -278,10 +292,16 @@ def calendar():
             + (f"\n--- メモ ---\n{notes[:1500]}\n" if notes else "")
         )
         entries.append((line, detail, meeting))
+        plain_lines.append(plain_line)
 
     if not entries:
         print("今日の予定はありません")
-        pause()
+        if not plain:
+            pause()
+        return 0
+
+    if plain:
+        print("\n".join(plain_lines))
         return 0
 
     open_url(choose(entries, "予定 > ", "Enter で会議 URL を開く / Esc で閉じる"))
@@ -320,10 +340,11 @@ def main():
         print(__doc__)
         return 2
     target = sys.argv[1]
+    plain = "--plain" in sys.argv[2:]
     if target in ("github", "gh"):
         return github()
     if target in ("calendar", "cal"):
-        return calendar()
+        return calendar(plain=plain)
     print(f"不明な対象: {target}")
     return 2
 
