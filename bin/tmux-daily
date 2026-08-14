@@ -1,0 +1,79 @@
+#!/usr/bin/env sh
+# 当日のデイリーメモを Glow で開く。当日のものが無ければ一番新しいものを開く。
+#
+#   tmux-daily            当日 (無ければ最新) のメモを開く
+#   tmux-daily --path     開くファイルのパスを出すだけ
+#   tmux-daily --help     使い方を出す
+#
+# tmux の display-popup から呼ばれる想定 (prefix + g)。Glow のページャの中なので
+# q で閉じる (j / k か矢印でスクロール、g / G で先頭と末尾)。
+#
+# 置き場は $KB_DAILY_DIR で変えられる (既定は ~/src/dc/kb/daily)。
+# ファイル名は YYYY-MM-DD.md を前提にしていて、「最新」は更新時刻ではなく
+# 名前の並び順で決める。後から古い日付を書き足しても、開くのは一番新しい日付。
+
+set -eu
+
+dir=${KB_DAILY_DIR:-$HOME/src/dc/kb/daily}
+
+usage() {
+    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+# display-popup はコマンドが終わると閉じるので、読む時間を作る
+pause() {
+    printf '\n閉じるには Enter を押してください '
+    read -r _ignored || true
+}
+
+die() {
+    printf '%s\n' "$1" >&2
+    pause
+    exit 1
+}
+
+# 当日のメモ、無ければ日付が一番新しいメモ。1 つも無ければ 1 を返す
+resolve() {
+    today="$dir/$(date +%Y-%m-%d).md"
+    if [ -f "$today" ]; then
+        printf '%s\n' "$today"
+        return 0
+    fi
+
+    # glob の展開は名前順なので、最後に残るものが一番新しい日付になる
+    # (ls を使わないのは、パイプに流すと shellcheck が止めるため)
+    latest=""
+    for file in "$dir"/*.md; do
+        [ -f "$file" ] || continue
+        latest=$file
+    done
+    [ -n "$latest" ] || return 1
+    printf '%s\n' "$latest"
+}
+
+case "${1:-}" in
+    --help | -h)
+        usage
+        exit 0
+        ;;
+    --path)
+        [ -d "$dir" ] || die "$dir がありません (KB_DAILY_DIR で変えられます)"
+        target=$(resolve) || die "$dir に .md がありません"
+        printf '%s\n' "$target"
+        exit 0
+        ;;
+    "") ;;
+    *)
+        printf '不明な引数: %s\n' "$1" >&2
+        exit 2
+        ;;
+esac
+
+if ! command -v glow > /dev/null 2>&1; then
+    die 'glow が入っていません (brew bundle --file=~/Brewfile か brew install glow)'
+fi
+[ -d "$dir" ] || die "$dir がありません (KB_DAILY_DIR で変えられます)"
+target=$(resolve) || die "$dir に .md がありません"
+
+# -p でページャに入れる (そのまま吐くと、長いメモは popup を閉じた時に流れて読めない)
+exec glow -p "$target"

@@ -65,7 +65,7 @@ for cmd in zsh git make nvim tmux; do
 done
 
 # 各機能が要求するもの (無ければ機能が黙って落ちるので警告として見せる)
-for cmd in rg fd jq gh entr python3 tree-sitter wtfutil; do
+for cmd in rg fd jq gh entr python3 tree-sitter wtfutil glow; do
     if have "$cmd"; then
         ok "$cmd が入っている"
     else
@@ -210,8 +210,8 @@ if have tmux; then
         fail "チートシートのキーが割り当たっている (tmux / nvim)" "見つかった数: $assigned"
     fi
 
-    # ポップアップで開くもの (ダッシュボード / Claude)
-    for popup in tmux-dashboard tmux-claude-scratch; do
+    # ポップアップで開くもの (ダッシュボード / デイリーメモ / Claude)
+    for popup in tmux-dashboard tmux-daily tmux-claude-scratch; do
         if tmux -L "$socket" list-keys -T prefix 2> /dev/null | grep -q "$popup"; then
             ok "ポップアップのキーが割り当たっている ($popup)"
         else
@@ -338,6 +338,46 @@ if have python3; then
     fi
 else
     skip "ダッシュボードのパネル" "python3 が無い"
+fi
+
+# デイリーメモの選び方 (Glow は起動しない。どのファイルを開くかだけ見る)
+daily_dir=$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-test-daily.XXXXXX") || daily_dir=""
+if [ -n "$daily_dir" ]; then
+    : > "$daily_dir/2026-01-02.md"
+    : > "$daily_dir/2026-01-10.md"
+    : > "$daily_dir/2025-12-31.md"
+
+    # 当日のものが無ければ、更新時刻ではなく日付が一番新しいもの
+    touch "$daily_dir/2025-12-31.md"
+    output=$(KB_DAILY_DIR="$daily_dir" "$DOTPATH/bin/tmux-daily" --path < /dev/null 2>&1)
+    if [ "$output" = "$daily_dir/2026-01-10.md" ]; then
+        ok "当日が無ければ日付が一番新しいメモを開く"
+    else
+        fail "当日が無ければ日付が一番新しいメモを開く" "$output"
+    fi
+
+    # 当日のものがあればそれを開く
+    today_file="$daily_dir/$(date +%Y-%m-%d).md"
+    : > "$today_file"
+    output=$(KB_DAILY_DIR="$daily_dir" "$DOTPATH/bin/tmux-daily" --path < /dev/null 2>&1)
+    if [ "$output" = "$today_file" ]; then
+        ok "当日のメモがあればそれを開く"
+    else
+        fail "当日のメモがあればそれを開く" "$output"
+    fi
+
+    # 置き場が無いときは黙って終わらずエラーにする
+    if output=$(KB_DAILY_DIR="$daily_dir/存在しない" "$DOTPATH/bin/tmux-daily" --path \
+        < /dev/null 2>&1); then
+        fail "置き場が無ければ失敗する" "エラーにならなかった: $output"
+    else
+        ok "置き場が無ければ失敗する"
+    fi
+
+    rm -f "$daily_dir"/*.md
+    rmdir "$daily_dir"
+else
+    skip "デイリーメモの選び方" "一時ディレクトリを作れない"
 fi
 
 if have python3; then
