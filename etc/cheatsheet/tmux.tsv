@@ -1,7 +1,7 @@
 # section	keys	summary	detail	source
 基本	C-q	prefix (すべての操作はこれを押してから)	tmux の操作は prefix を押してから次のキーを押す。押している間だけ待ち受け状態になる。	custom
 基本	C-q ?	このチートシート		custom
-基本	C-q d	デタッチ (セッションは残る)	端末を閉じてもセッションは生き続ける。tmux a で戻れる。	builtin
+基本	C-q D	デタッチ (セッションは残る)	端末を閉じてもセッションは生き続ける。tmux a で戻れる。既定の d はダッシュボードに使っているので D に退避してある。	custom
 基本	C-q s	セッション一覧から選ぶ		builtin
 基本	C-q $	セッション名を変更		builtin
 基本	C-q :	tmux のコマンドを入力	list-keys など、キーに割り当てていない操作はここから。	builtin
@@ -34,8 +34,7 @@
 コピー	Enter	選択範囲をコピーして抜ける		custom
 コピー	C-q ]	貼り付け		builtin
 コピー	C-q y / C-q Y	コマンドライン / カレントパスをコピー		custom
-ポップアップ	C-q g	GitHub の未読通知	Enter でブラウザを開く。	custom
-ポップアップ	C-q a	今日の予定	Enter で会議 URL を開く。	custom
+ポップアップ	C-q d	ダッシュボード (今日の予定 + GitHub)	wtfutil。左に予定と Anthropic のステータス、中央に backend・frontend・infra の PR、右に天気・Power・Network・Claude Code の使用量。C-c で閉じる (q はフォーカスしていないときだけ)。1-4 か Tab でパネルを選び、j / k で移動・Enter でブラウザ。C-r で全パネル更新。	custom
 ポップアップ	C-q v	Neovim のチートシート		custom
 ポップアップ	C-q A	Claude を開く / 隠す	同じキーで切り替わる。隠しても会話は残るので、次に開くと続きから使える。終了したいときは中で /exit か C-d。	custom
 セッション保存	C-q C-s	セッションを保存	ウィンドウ・ペイン構成を保存する (resurrect)。	custom

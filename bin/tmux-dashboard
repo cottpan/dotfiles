@@ -1,0 +1,136 @@
+#!/usr/bin/env sh
+# ダッシュボード (今日の予定 + GitHub の PR / レビュー依頼) を wtfutil で開く。
+#
+#   tmux-dashboard            ダッシュボードを開く
+#   tmux-dashboard --config   組み立てた設定ファイルのパスを出すだけ
+#   tmux-dashboard --help     使い方を出す
+#
+# tmux の display-popup から呼ばれる想定 (prefix + d)。中で q か C-c を押すと閉じる。
+#
+# リポジトリは 1 パネル 1 つ。名前は ~/.config/wtf/repositories.local の対応表で渡す:
+#
+#   backend = owner/repo
+#   frontend = owner/another-repo
+#
+# dotfiles は公開リポジトリなので、業務のリポジトリ名は commit しない。
+# .config/wtf/config.yml の # __REPO:キー__ の行を対応する名前で置き換えて、
+# キャッシュ側に本番用の設定を書き出してから wtfutil に渡す。
+#
+# GitHub のトークンも設定に書かず、gh auth token を WTF_GITHUB_TOKEN で渡す。
+
+set -eu
+
+config_src="${WTF_CONFIG_SRC:-$HOME/.config/wtf/config.yml}"
+repos_file="${WTF_REPOSITORIES_FILE:-$HOME/.config/wtf/repositories.local}"
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/tmux-dashboard"
+config_out="$cache_dir/config.yml"
+
+usage() {
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+# display-popup はコマンドが終わると閉じるので、読む時間を作る
+pause() {
+    printf '\n閉じるには Enter を押してください '
+    read -r _ignored || true
+}
+
+die() {
+    printf '%s\n' "$1" >&2
+    pause
+    exit 1
+}
+
+# config.yml の # __REPO:キー__ を対応表のリポジトリ名に差し替える。
+# 目印は行全体で一致させる (前方一致にすると説明のコメントまで差し替えてしまい、
+# ルート直下にリストが入って YAML が壊れる。実際に踏んだ)。
+#
+# あわせて ~/ を実際のホームに直す。cmdrunner はシェルを通さずに exec するので、
+# wtfutil 0.50.0 は ~/ を展開できない (設定側は環境に依らない書き方のままにしておく)
+build_config() {
+    mkdir -p "$cache_dir"
+    if [ ! -f "$repos_file" ]; then
+        die "$repos_file がありません (例: backend = owner/repo を 1 行ずつ書く)"
+    fi
+    if awk -v repos_file="$repos_file" -v home="$HOME" '
+        BEGIN {
+            while ((getline line < repos_file) > 0) {
+                sub(/#.*/, "", line)
+                if (line !~ /=/) {
+                    continue
+                }
+                key = line
+                sub(/=.*/, "", key)
+                value = line
+                sub(/^[^=]*=/, "", value)
+                gsub(/^[ \t]+|[ \t]+$/, "", key)
+                gsub(/^[ \t]+|[ \t]+$/, "", value)
+                if (key != "" && value != "") {
+                    repos[key] = value
+                }
+            }
+            close(repos_file)
+        }
+        /^[[:space:]]*# __REPO:[A-Za-z0-9_-]+__$/ {
+            key = $0
+            sub(/^[[:space:]]*# __REPO:/, "", key)
+            sub(/__$/, "", key)
+            if (key in repos) {
+                printf "        - %s\n", repos[key]
+            } else {
+                printf "%s に %s の行がありません\n", repos_file, key > "/dev/stderr"
+                missing = 1
+            }
+            next
+        }
+        {
+            gsub(/"~\//, "\"" home "/")
+            print
+        }
+        END {
+            if (missing) {
+                exit 3
+            }
+        }
+    ' "$config_src" > "$config_out"; then
+        return 0
+    fi
+    die "リポジトリの対応表が設定と噛み合っていません ($repos_file を直してください)"
+}
+
+case "${1:-}" in
+    --help | -h)
+        usage
+        exit 0
+        ;;
+    --config)
+        [ -f "$config_src" ] || die "設定が見つかりません: $config_src"
+        build_config
+        printf '%s\n' "$config_out"
+        exit 0
+        ;;
+    "") ;;
+    *)
+        printf '不明な引数: %s\n' "$1" >&2
+        exit 2
+        ;;
+esac
+
+if ! command -v wtfutil > /dev/null 2>&1; then
+    die 'wtfutil が入っていません (brew bundle --file=~/Brewfile か brew install wtfutil)'
+fi
+[ -f "$config_src" ] || die "設定が見つかりません: $config_src"
+
+build_config
+
+# gh のトークンを借りる (未ログインなら GitHub パネルだけがエラーを出す。
+# 予定のパネルは動くので、そのまま起動する)
+if [ -z "${WTF_GITHUB_TOKEN:-}" ] && command -v gh > /dev/null 2>&1; then
+    token=$(gh auth token 2> /dev/null || true)
+    if [ -n "$token" ]; then
+        WTF_GITHUB_TOKEN=$token
+        export WTF_GITHUB_TOKEN
+    fi
+fi
+
+exec wtfutil --config="$config_out"
