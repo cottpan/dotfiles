@@ -320,8 +320,14 @@ if have python3; then
     fi
 
     # 設定が呼んでいるパネルが実装されていること (config.yml と実装のずれを見る)
+    # パネル名は [a-z]* なので単語分割で回す。sed の結果を直接 for に渡すと
+    # while read を勧める指摘 (SC2013) が出るが、パイプにすると集計が
+    # サブシェルに閉じてしまうため、一度変数に受けてから回す
+    configured_panels=$(
+        sed -n 's/.*"--panel", "\([a-z]*\)".*/\1/p' "$DOTPATH/.config/wtf/config.yml"
+    )
     missing=""
-    for panel in $(sed -n 's/.*"--panel", "\([a-z]*\)".*/\1/p' "$DOTPATH/.config/wtf/config.yml"); do
+    for panel in $configured_panels; do
         "$DOTPATH/bin/tmux-status-right" --panel "$panel" > /dev/null 2>&1 < /dev/null ||
             missing="$missing $panel"
     done
