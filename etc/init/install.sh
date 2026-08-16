@@ -117,4 +117,20 @@ if [ -z "$CI" ] && command -v tmux > /dev/null 2>&1 ; then
         echo "Installing tmux plugins..."
         "$tpm_path/bin/install_plugins"
     fi
+
+    # continuum は tmux サーバの起動時に復元を試みる。保存が一度も無い新しい
+    # マシンでは resurrect が "Tmux resurrect file not found!" と出してくるので、
+    # 空の保存を置いて黙らせる (次の自動保存が普通に上書きしていく)
+    resurrect_dir="${XDG_DATA_HOME:-$HOME/.local/share}/tmux/resurrect"
+    if [ -d "$HOME/.tmux/resurrect" ]; then
+        # resurrect は旧い置き場が既にあればそちらを使う
+        resurrect_dir="$HOME/.tmux/resurrect"
+    fi
+    if [ ! -e "$resurrect_dir/last" ]; then
+        echo "Seeding an empty tmux-resurrect save..."
+        mkdir -p "$resurrect_dir"
+        resurrect_seed="tmux_resurrect_$(date +%Y%m%dT%H%M%S).txt"
+        : > "$resurrect_dir/$resurrect_seed"
+        ln -sfn "$resurrect_seed" "$resurrect_dir/last"
+    fi
 fi
