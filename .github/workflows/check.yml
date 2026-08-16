@@ -7,7 +7,7 @@ on:
     branches: [master]
 
 jobs:
-  # 構文チェックと、隔離した HOME へのデプロイ。macOS と Fedora の両方で回す
+  # 構文チェックと、隔離した HOME へのデプロイ。macOS / Fedora / Ubuntu で回す
   checks:
     name: 静的チェックとデプロイ (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -18,19 +18,23 @@ jobs:
         include:
           - name: macOS
             os: macos-latest
+            setup: brew install shellcheck
           - name: Fedora
             os: ubuntu-latest
             container: fedora:latest
+            setup: dnf install -y git make zsh ShellCheck python3 file findutils
+          - name: Ubuntu
+            os: ubuntu-latest
+            container: ubuntu:latest
+            setup: >-
+              apt-get update &&
+              DEBIAN_FRONTEND=noninteractive apt-get install -y
+              git make zsh shellcheck python3 file findutils
     steps:
       - uses: actions/checkout@v4
 
-      - name: 必要なコマンドを入れる (Fedora)
-        if: matrix.container != ''
-        run: dnf install -y git make zsh ShellCheck python3 file findutils
-
-      - name: 必要なコマンドを入れる (macOS)
-        if: matrix.container == ''
-        run: brew install shellcheck
+      - name: 必要なコマンドを入れる
+        run: ${{ matrix.setup }}
 
       # コンテナ内は checkout の所有者と実行ユーザが異なり、git が警告を出して止まる
       - name: リポジトリを git の安全なディレクトリに登録する

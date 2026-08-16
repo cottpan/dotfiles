@@ -25,6 +25,20 @@ is_fedora() {
     fi
 }
 
+# Ubuntu 本体と、その派生 (Linux Mint など) / Debian もまとめて見る
+is_ubuntu() {
+    if [ -f /etc/os-release ]; then
+        # shellcheck disable=SC1091
+        . /etc/os-release
+        case "${ID:-}|${ID_LIKE:-}" in
+            ubuntu\|* | debian\|* | *ubuntu* | *debian*) return 0 ;;
+            *) return 1 ;;
+        esac
+    else
+        return 1
+    fi
+}
+
 if [ -n "$CI" ] ; then
     DOTPATH=$RUNNER_WORKSPACE/dotfiles
 fi
@@ -40,6 +54,9 @@ if is_macos ; then
 elif is_linux && is_fedora ; then
     echo "Fedora detected. Calling Fedora install scripts..."
     source "${DOTPATH}/etc/init/linux/fedora/install"
+elif is_linux && is_ubuntu ; then
+    echo "Ubuntu detected. Calling Ubuntu install scripts..."
+    source "${DOTPATH}/etc/init/linux/ubuntu/install"
 else
     echo "Unsupported OS. Skipping OS-specific package installation."
 fi

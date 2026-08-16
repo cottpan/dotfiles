@@ -60,7 +60,7 @@ for cmd in zsh git make nvim tmux; do
     if have "$cmd"; then
         ok "$cmd が入っている"
     else
-        fail "$cmd が入っている" "Brewfile / dnf の一覧を確認する"
+        fail "$cmd が入っている" "Brewfile / dnf / apt の一覧を確認する"
     fi
 done
 

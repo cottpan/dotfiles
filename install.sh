@@ -29,6 +29,29 @@ is_fedora() {
     fi
 }
 
+# Ubuntu 本体と、その派生 (Linux Mint など) / Debian もまとめて見る
+is_ubuntu() {
+    if [ -f /etc/os-release ]; then
+        # shellcheck disable=SC1091
+        . /etc/os-release
+        case "${ID:-}|${ID_LIKE:-}" in
+            ubuntu\|* | debian\|* | *ubuntu* | *debian*) return 0 ;;
+            *) return 1 ;;
+        esac
+    else
+        return 1
+    fi
+}
+
+# etc/init/linux 以下のどのディレクトリを使うか
+linux_family() {
+    if is_fedora ; then
+        echo "fedora"
+    elif is_ubuntu ; then
+        echo "ubuntu"
+    fi
+}
+
 is_arm() { 
     test "$UNAME" == "arm64"
 }
@@ -80,8 +103,15 @@ elif is_linux ; then
             echo "Installing git..."
             sudo dnf install -y git
         fi
+    elif is_ubuntu ; then
+        echo "Ubuntu detected."
+        if ! command -v git > /dev/null 2>&1; then
+            echo "Installing git..."
+            sudo apt-get update
+            sudo apt-get install -y git
+        fi
     else
-        echo "Unsupported Linux distribution. Abort."
+        echo "Unsupported Linux distribution: ${ID:-unknown}. (Fedora / Ubuntu) Abort."
         exit 1
     fi
 else
@@ -91,17 +121,21 @@ fi
 
 dotfiles_download
 
-if is_fedora && [ -d "${DOTPATH}" ]; then
-    prerequisites="${DOTPATH}/etc/init/linux/fedora/prerequisites.sh"
+if is_linux && [ -d "${DOTPATH}" ]; then
+    prerequisites="${DOTPATH}/etc/init/linux/$(linux_family)/prerequisites.sh"
     if [ -f "$prerequisites" ]; then
         bash "$prerequisites"
-    else
+    elif is_fedora ; then
         echo "Installing prerequisites..."
         sudo dnf install -y git make
+    elif is_ubuntu ; then
+        echo "Installing prerequisites..."
+        sudo apt-get update
+        sudo apt-get install -y git make
     fi
 fi
 
-if is_fedora && ! command -v make > /dev/null 2>&1; then
+if is_linux && ! command -v make > /dev/null 2>&1; then
     echo "error: make is required but not installed"
     exit 1
 fi
