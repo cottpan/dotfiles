@@ -93,7 +93,36 @@ return {
       { "<leader>o", "<Cmd>Neotree focus<CR>", desc = "Focus file tree" },
     },
     opts = {
-      window = { width = 32 },
+      window = {
+        width = 32,
+        mappings = {
+          -- 組み込みの y は「ファイルをコピー」なので、パスのコピーは別キーに割り当てる
+          ["Y"] = "copy_relative_path",
+          ["gy"] = "copy_absolute_path",
+        },
+      },
+      commands = {
+        copy_relative_path = function(state)
+          local node = state.tree:get_node()
+          if not node then
+            return
+          end
+          local path = node:get_id()
+          -- cwd の外を指しているときは相対化できないので絶対パスのまま渡す
+          local rel = vim.fs.relpath(vim.uv.cwd(), path) or path
+          vim.fn.setreg("+", rel)
+          vim.notify("Copied: " .. rel)
+        end,
+        copy_absolute_path = function(state)
+          local node = state.tree:get_node()
+          if not node then
+            return
+          end
+          local path = node:get_id()
+          vim.fn.setreg("+", path)
+          vim.notify("Copied: " .. path)
+        end,
+      },
       filesystem = {
         follow_current_file = { enabled = true },
         use_libuv_file_watcher = true,
