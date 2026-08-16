@@ -25,8 +25,18 @@ alias diff="colordiff"
 # alias cat='bat'
 alias gip='curl ifconfig.io/all'
 
-if [ `uname -m` = "arm64" ]; then
-  eval $(/opt/homebrew/bin/brew shellenv)
-else
-  eval $(/usr/local/bin/brew shellenv)
-fi
+# Homebrew。置き場所は環境ごとに違い (Apple Silicon / Intel / Linuxbrew)、
+# Linux では入っていないこともあるので、実際にあるものを使う。
+# アーキテクチャで振り分けると、Linux が Intel Mac のパスを掴んで毎回エラーになる
+for brew_candidate in \
+  /opt/homebrew/bin/brew \
+  /usr/local/bin/brew \
+  /home/linuxbrew/.linuxbrew/bin/brew \
+  "$HOME/.linuxbrew/bin/brew"
+do
+  if [ -x "$brew_candidate" ]; then
+    eval "$("$brew_candidate" shellenv)"
+    break
+  fi
+done
+unset brew_candidate
