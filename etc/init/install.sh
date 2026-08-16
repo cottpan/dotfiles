@@ -66,6 +66,37 @@ if [ -z "$CI" ] ; then
     mkdir -p "$HOME/.vim/backup"
 fi
 
+# tree-sitter の CLI。nvim-treesitter の main ブランチはパーサのビルドをこれに任せる
+# ので、無いと :TSUpdate が ENOENT で落ちる。macOS は Brewfile の tree-sitter-cli で
+# 入るが、dnf にも apt にも使えるものが無い (あっても main が要求するより古い) ので、
+# Linux では公式のリリースを ~/.local/bin に置く
+install_tree_sitter_cli() {
+    local asset url
+    case "$(uname -m)" in
+        x86_64) asset="tree-sitter-linux-x64.gz" ;;
+        aarch64 | arm64) asset="tree-sitter-linux-arm64.gz" ;;
+        *)
+            echo "warning: no official tree-sitter build for $(uname -m)"
+            return 1
+            ;;
+    esac
+
+    url="https://github.com/tree-sitter/tree-sitter/releases/latest/download/${asset}"
+    echo "Installing the tree-sitter CLI from ${url}..."
+    mkdir -p "$HOME/.local/bin"
+    if ! curl -fsSL "$url" | gunzip > "$HOME/.local/bin/tree-sitter"; then
+        rm -f "$HOME/.local/bin/tree-sitter"
+        echo "warning: failed to download the tree-sitter CLI"
+        return 1
+    fi
+    chmod +x "$HOME/.local/bin/tree-sitter"
+    hash -r
+}
+
+if [ -z "$CI" ] && is_linux && ! command -v tree-sitter > /dev/null 2>&1 ; then
+    install_tree_sitter_cli || true
+fi
+
 # Neovim: lazy.nvim は .config/nvim/init.lua が自前で bootstrap するので、
 # ここでは初回のプラグイン同期だけ済ませておく
 # (mason の LSP サーバは headless では入らないので、初回の nvim 起動時に導入される)
