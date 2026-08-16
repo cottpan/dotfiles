@@ -1,11 +1,17 @@
 ## Installation
 
-### macOS / Fedora
+### macOS / Fedora / Ubuntu
 ```bash
 bash -c "$(curl -fsSL https://bit.ly/3X8YDzE)"
 ```
 
-Fedora では `sudo` 権限が必要です（`dnf` でパッケージをインストールします）。
+Linux では `sudo` 権限が必要です（Fedora は `dnf`、Ubuntu は `apt` でパッケージを
+インストールします）。Ubuntu は Debian 系の派生（Linux Mint など）も同じ経路で入ります。
+
+Ubuntu の apt に入っている Neovim はプラグインの要求（0.11 以降）より古いことが
+多いため、足りない場合は公式ビルドを `~/.local/nvim` に展開して `~/.local/bin/nvim`
+から参照します。`gh` は標準リポジトリに無いので、GitHub 公式の apt リポジトリを追加します。
+
 インストール後、ログインシェルを zsh に変更してください。
 
 ```bash
@@ -38,5 +44,5 @@ make test-runtime   # このマシンで実際に動くかを見る
 道具が入っていない環境では該当項目を skip するので、どの環境でも走ります。
 `deploy` は `HOME` を一時ディレクトリに差し替えて実行するため、実際のホームディレクトリには触れません。
 
-CI では macOS と Fedora コンテナの両方で `syntax` と `deploy` を回し、
+CI では macOS と Fedora / Ubuntu コンテナで `syntax` と `deploy` を回し、
 macOS では加えて `install.sh` を最初から流したうえで `runtime` を確認しています。

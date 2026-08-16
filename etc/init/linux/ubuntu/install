@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+# エラーがあったらそこで即終了
+set -eo pipefail
+# Prevent commands misbehaving due to locale differences
+export LC_ALL=C
+
+DOTPATH=${DOTPATH:-$HOME/dotfiles}
+
+if [ -n "$CI" ]; then
+    DOTPATH=$RUNNER_WORKSPACE/dotfiles
+fi
+
+# apt が tzdata などで対話プロンプトを出すと止まってしまう
+export DEBIAN_FRONTEND=noninteractive
+# 自前で入れるもの (Neovim / fd / bat) の置き場。.zshenv も PATH の先頭に入れる
+export PATH="$HOME/.local/bin:$PATH"
+
+# リリースによって無いパッケージがある。apt-get は名前を一つでも解決できないと
+# 何も入れずに終わるので、実在するものだけを渡す
+apt_available() {
+    apt-cache show "$1" > /dev/null 2>&1
+}
+
+ubuntu_java_devel_package() {
+    local pkg
+    for pkg in openjdk-25-jdk openjdk-21-jdk openjdk-17-jdk default-jdk; do
+        if apt_available "$pkg"; then
+            echo "$pkg"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Ubuntu の標準リポジトリに gh は無いので、GitHub 公式のリポジトリを足す
+add_github_cli_repo() {
+    local arch keyring
+    keyring=/etc/apt/keyrings/githubcli-archive-keyring.gpg
+    arch=$(dpkg --print-architecture)
+
+    echo "Adding the GitHub CLI apt repository..."
+    sudo install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg |
+        sudo tee "$keyring" > /dev/null
+    sudo chmod go+r "$keyring"
+    echo "deb [arch=${arch} signed-by=${keyring}] https://cli.github.com/packages stable main" |
+        sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+    sudo apt-get update
+}
+
+# nvim-treesitter の main ブランチなどが 0.11 以降を要求する。
+# Ubuntu の apt に入っているものは古いことが多いので、足りなければ公式ビルドを使う
+NVIM_REQUIRED_MINOR=11
+
+nvim_is_new_enough() {
+    local version major minor
+    command -v nvim > /dev/null 2>&1 || return 1
+    version=$(nvim --version | head -1 | sed -n 's/^NVIM v\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p')
+    [ -n "$version" ] || return 1
+    major=${version%%.*}
+    minor=${version#*.}
+    [ "$major" -gt 0 ] && return 0
+    [ "$minor" -ge "$NVIM_REQUIRED_MINOR" ]
+}
+
+install_neovim_release() {
+    local asset url tmp
+    case "$(uname -m)" in
+        x86_64) asset=nvim-linux-x86_64 ;;
+        aarch64 | arm64) asset=nvim-linux-arm64 ;;
+        *)
+            echo "warning: no official Neovim build for $(uname -m)"
+            return 1
+            ;;
+    esac
+
+    url="https://github.com/neovim/neovim/releases/latest/download/${asset}.tar.gz"
+    tmp=$(mktemp -d)
+    echo "Installing Neovim from ${url}..."
+    if ! curl -fsSL "$url" -o "$tmp/nvim.tar.gz"; then
+        rm -rf "$tmp"
+        echo "warning: failed to download Neovim"
+        return 1
+    fi
+
+    rm -rf "$HOME/.local/nvim"
+    mkdir -p "$HOME/.local/nvim" "$HOME/.local/bin"
+    tar -xzf "$tmp/nvim.tar.gz" -C "$HOME/.local/nvim" --strip-components=1
+    ln -sfn "$HOME/.local/nvim/bin/nvim" "$HOME/.local/bin/nvim"
+    rm -rf "$tmp"
+    # apt の古い nvim を先に叩いていると、その場所が hash に残ったままになる
+    hash -r
+}
+
+# Ubuntu は fd / bat を fdfind / batcat という名前で入れる
+link_command_alias() {
+    local want=$1 actual=$2
+    if command -v "$want" > /dev/null 2>&1; then
+        return 0
+    fi
+    if command -v "$actual" > /dev/null 2>&1; then
+        mkdir -p "$HOME/.local/bin"
+        ln -sfn "$(command -v "$actual")" "$HOME/.local/bin/$want"
+    fi
+}
+
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+
+if ! apt_available gh; then
+    add_github_cli_repo
+fi
+
+# Brewfile.test に対応する Ubuntu パッケージ。
+# Neovim は下で公式ビルドを入れるのでここには含めない
+CANDIDATE_PACKAGES=(
+    awscli
+    bat
+    colordiff
+    entr
+    fd-find
+    ffmpeg
+    fzf
+    gcc
+    gh
+    git
+    git-delta
+    jq
+    libjxl-tools
+    make
+    ripgrep
+    shellcheck
+    tmux
+    unzip
+    webp
+    yt-dlp
+    zsh
+)
+
+JAVA_DEVEL=$(ubuntu_java_devel_package || true)
+if [ -n "$JAVA_DEVEL" ]; then
+    CANDIDATE_PACKAGES+=("$JAVA_DEVEL")
+else
+    echo "warning: no OpenJDK devel package found in enabled repositories"
+fi
+
+PACKAGES=()
+MISSING=()
+for package in "${CANDIDATE_PACKAGES[@]}"; do
+    if apt_available "$package"; then
+        PACKAGES+=("$package")
+    else
+        MISSING+=("$package")
+    fi
+done
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+    echo "warning: not available in enabled repositories: ${MISSING[*]}"
+fi
+
+echo "Installing packages via apt..."
+sudo apt-get install -y "${PACKAGES[@]}"
+
+hash -r
+link_command_alias fd fdfind
+link_command_alias bat batcat
+
+if ! nvim_is_new_enough; then
+    install_neovim_release || true
+fi
+if ! nvim_is_new_enough; then
+    echo "warning: Neovim 0.${NVIM_REQUIRED_MINOR} 以降が必要です (プラグインが動きません)"
+fi
+
+# zplug
+if [ ! -d "$HOME/.zplug" ]; then
+    echo "Installing zplug..."
+    git clone https://github.com/zplug/zplug "$HOME/.zplug"
+fi
+
+# mise (.zshrc で使用)
+if ! command -v mise > /dev/null 2>&1; then
+    echo "Installing mise..."
+    curl -fsSL https://mise.run | sh
+fi
+
+mkdir -p "$HOME/.config/git"
+if [ ! -f "$HOME/.config/git/ignore" ]; then
+    touch "$HOME/.config/git/ignore"
+fi
