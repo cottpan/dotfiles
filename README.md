@@ -16,6 +16,26 @@ Python の [uv](https://docs.astral.sh/uv/) は、macOS では Brewfile 経由�
 公式のインストーラで `~/.local/bin` に入れます（シェルの設定は書き換えず、`.zshenv` が
 通している PATH に任せます）。
 
+### mise で入れる CLI
+
+`.config/mise/config.toml` の `[tools]` に書いたものは、`make deploy`（`etc/init/install.sh`）が
+`mise install` で入れます。macOS / Linux のどちらにも同じ版が入るので、brew と dnf / apt で
+出来が違うもの・そもそも無いものはここに置きます。PATH は `.zshrc` の `mise activate` が通します。
+
+| ツール | 用途 |
+| --- | --- |
+| [hunk](https://hunk.dev/) | レビュー向けのターミナル diff ビューア（`hunk diff` / `hunk show`） |
+| [jnv](https://github.com/ynqa/jnv) | jq の対話版。クエリを打ちながら結果を見る |
+| [lazydocker](https://github.com/jesseduffield/lazydocker) | コンテナ / ログ / リソースの TUI |
+| [yazi](https://yazi-rs.github.io/) | ファイラ。`ya` も一緒に入る |
+
+`btop` は aqua が Linux のバイナリしか持っていないので、mise ではなく Brewfile と
+各ディストロのパッケージで入れます。
+
+PR / issue のダッシュボード [gh-dash](https://github.com/dlvhdr/gh-dash) は gh の拡張として
+入れます（`gh dash` で起動）。未ログインの環境では入らないことがあるので、その場合は
+`gh auth login` のあとに `gh extension install dlvhdr/gh-dash` を実行してください。
+
 ### DB クライアント
 
 ターミナルの SQL クライアントとして [harlequin](https://harlequin.sh/) を、公式が勧める

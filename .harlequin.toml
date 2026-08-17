@@ -1,0 +1,23 @@
+# Harlequin (TUI の DB クライアント) の設定
+#
+# 既定のキーマップ "vscode" の上に "mykeys" を重ねて、Quit を C-q から C-t に移す。
+# 理由: tmux の prefix が C-q (.tmux.conf) なので、C-q は tmux に吸われて harlequin まで届かない。
+#
+# キーを変えたいときは下の keys を書き換える (対話的に編集するなら `harlequin --keys`)。
+# キー名は Textual の記法 (ctrl+t / f7 / shift+tab ...)。カンマ区切りで複数割り当てられる。
+# vscode キーマップが空けているのは ctrl+t / ctrl+l / f7 / f11 くらい。
+# (ctrl+p は Textual のコマンドパレット、ctrl+d はエディタの delete なので避ける)
+#
+# 注意: `harlequin --keys` の画面だけは Quit が C-q 固定でこの設定が効かない。
+#       抜けるには tmux 側から literal な C-q を送る必要がある
+#       (.tmux.conf に `bind q send-prefix` を足すなど)。
+
+default_profile = "mykeys"
+
+[profiles.mykeys]
+keymap_name = ["vscode", "mykeys"]
+
+[[keymaps.mykeys]]
+keys = "ctrl+t"
+action = "quit"
+key_display = "^t"

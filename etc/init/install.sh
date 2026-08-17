@@ -123,13 +123,13 @@ HARLEQUIN_PACKAGE="harlequin[postgres]"
 
 # 初回の macOS では brew を入れた直後で、この shell の PATH にまだ載っていない。
 # Fedora も ~/.local/bin を PATH に入れていないので、既知の置き場も見て探す
-find_uv() {
-    local candidate
-    if command -v uv > /dev/null 2>&1; then
-        command -v uv
+find_bin() {
+    local name=$1 candidate
+    if command -v "$name" > /dev/null 2>&1; then
+        command -v "$name"
         return 0
     fi
-    for candidate in "$HOME/.local/bin/uv" /opt/homebrew/bin/uv /usr/local/bin/uv; do
+    for candidate in "$HOME/.local/bin/$name" "/opt/homebrew/bin/$name" "/usr/local/bin/$name"; do
         if [ -x "$candidate" ]; then
             echo "$candidate"
             return 0
@@ -140,7 +140,7 @@ find_uv() {
 
 install_harlequin() {
     local uv
-    if ! uv=$(find_uv); then
+    if ! uv=$(find_bin uv); then
         echo "warning: uv not found; skipping harlequin"
         return 1
     fi
@@ -155,6 +155,54 @@ install_harlequin() {
 if [ -z "$CI" ] && ! command -v harlequin > /dev/null 2>&1 &&
     [ ! -x "$HOME/.local/bin/harlequin" ] ; then
     install_harlequin || true
+fi
+
+# .config/mise/config.toml の [tools] に書いた CLI (hunk など)。
+# mise は macOS / Linux のどちらにも同じ版を入れられるので、brew と dnf / apt で
+# 出来が違うもの・そもそも無いものはここにまとめる。
+# 実体は mise 管理下に入り、.zshrc の mise activate で PATH に載る
+install_mise_tools() {
+    local mise
+    if ! mise=$(find_bin mise); then
+        echo "warning: mise not found; skipping the tools in .config/mise/config.toml"
+        return 1
+    fi
+    echo "Installing the tools declared in .config/mise/config.toml..."
+    if ! "$mise" install; then
+        echo "warning: mise install failed"
+        return 1
+    fi
+}
+
+if [ -z "$CI" ] ; then
+    install_mise_tools || true
+fi
+
+# gh の拡張。gh-dash (PR / issue のダッシュボード) は mise の registry にも
+# homebrew-core にも無く、本家も gh 拡張としての導入を案内している
+GH_EXTENSIONS="dlvhdr/gh-dash"
+
+install_gh_extensions() {
+    local gh extension installed
+    if ! gh=$(find_bin gh); then
+        echo "warning: gh not found; skipping gh extensions"
+        return 1
+    fi
+    installed=$("$gh" extension list 2> /dev/null || true)
+    for extension in $GH_EXTENSIONS; do
+        case "$installed" in
+            *"$extension"*) continue ;;
+        esac
+        echo "Installing the gh extension ${extension}..."
+        # 未ログインだと API の制限に掛かって落ちることがある。
+        # その時は gh auth login のあとで入れ直せばよいので、ここでは止めない
+        "$gh" extension install "$extension" ||
+            echo "warning: failed to install ${extension} (gh auth login が要るかもしれません)"
+    done
+}
+
+if [ -z "$CI" ] ; then
+    install_gh_extensions || true
 fi
 
 # Neovim: lazy.nvim は .config/nvim/init.lua が自前で bootstrap するので、

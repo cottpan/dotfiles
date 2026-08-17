@@ -65,13 +65,38 @@ for cmd in zsh git make nvim tmux; do
 done
 
 # 各機能が要求するもの (無ければ機能が黙って落ちるので警告として見せる)
-for cmd in rg fd jq gh entr python3 uv harlequin tree-sitter wtfutil glow; do
+for cmd in rg fd jq gh entr python3 uv harlequin btop tree-sitter wtfutil glow; do
     if have "$cmd"; then
         ok "$cmd が入っている"
     else
         skip "$cmd が入っている" "この環境には無い"
     fi
 done
+
+# mise で入れるもの。shims は PATH に入れていない (対話シェルでは .zshrc の
+# mise activate が通す) ので、この shell からは mise 経由で見る
+if have mise; then
+    for cmd in hunk jnv lazydocker yazi; do
+        if mise which "$cmd" > /dev/null 2>&1; then
+            ok "$cmd が入っている (mise)"
+        else
+            skip "$cmd が入っている (mise)" "この環境には無い"
+        fi
+    done
+else
+    skip "mise のツール" "mise が無い"
+fi
+
+# gh の拡張 (gh dash)
+if have gh; then
+    if gh extension list 2> /dev/null | grep -q "gh-dash"; then
+        ok "gh-dash が入っている (gh 拡張)"
+    else
+        skip "gh-dash が入っている (gh 拡張)" "この環境には無い"
+    fi
+else
+    skip "gh の拡張" "gh が無い"
+fi
 
 if [ "$(uname)" = "Darwin" ]; then
     for cmd in icalBuddy pbcopy; do
