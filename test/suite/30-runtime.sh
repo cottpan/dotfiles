@@ -65,7 +65,7 @@ for cmd in zsh git make nvim tmux; do
 done
 
 # 各機能が要求するもの (無ければ機能が黙って落ちるので警告として見せる)
-for cmd in rg fd jq gh entr python3 uv tree-sitter wtfutil glow; do
+for cmd in rg fd jq gh entr python3 uv harlequin tree-sitter wtfutil glow; do
     if have "$cmd"; then
         ok "$cmd が入っている"
     else
