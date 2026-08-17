@@ -5,8 +5,23 @@ grapheme-width-method = legacy
 # (システムに合わせたいなら dark:"iTerm2 Solarized Dark",light:"iTerm2 Solarized Light")
 theme = "iTerm2 Solarized Dark"
 
-font-family = "Monaco"
-font-family = "Hiragino Sans"
-# Nerd Font のグリフ (tmux ステータスや nvim-web-devicons 用) だけをフォールバックで補う
-font-family = "Symbols Nerd Font Mono"
-font-size = 12
+# HackGen Console NF (Hack + 源柔ゴシック)。欧文・日本語・Nerd Font のグリフを 1 つの
+# フォントで賄うので、フォールバックを重ねずに済む。
+#
+# 以前の Monaco / Menlo + Hiragino Sans には 2 つ問題があった。
+#   1. Monaco はレギュラーしか持たないので、太字だけ実ボールドを持つ Hiragino Sans
+#      (W6) で描かれ、そこだけプロポーショナルになって桁がずれた
+#   2. セル幅は欧文の送り幅で決まるため、全角は 2 セル = 1.2em の箱に実寸 1.0em の
+#      グリフが中央寄せされ、日本語 1 文字ごとに約 2 割の余白が空いていた
+#      (実測: Monaco 0.600em / Menlo 0.602em, Hiragino の全角 1.000em)
+# HackGen は欧文と全角の幅比がちょうど 1:2 (実測 0.527em / 1.055em) なので 2. が消え、
+# ボールドを実際に持つので 1. も起きない。イタリックは持たないが、フォールバック先が
+# 無いので font-synthetic-style の既定で合成される = 幅は保たれる。
+#
+# 幅比 3:5 の HackGen35 は選ばない。全角が 2 セルに対して 1.2 倍不足するので、
+# Menlo + Hiragino と同じく日本語の字間が空く (実測 0.604em / 1.006em)。
+# 確認: ghostty +show-face --string=Aあ --style=bold
+font-family = "HackGen Console NF"
+# 欧文の送り幅が Menlo より狭い (0.527em vs 0.602em) ので、同じ見え方には 1 段大きく要る
+# (Menlo 13 とセル幅を揃えるなら 15)
+font-size = 14
