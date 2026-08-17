@@ -12,6 +12,10 @@ Ubuntu の apt に入っている Neovim はプラグインの要求（0.11 以�
 多いため、足りない場合は公式ビルドを `~/.local/nvim` に展開して `~/.local/bin/nvim`
 から参照します。`gh` は標準リポジトリに無いので、GitHub 公式の apt リポジトリを追加します。
 
+Python の [uv](https://docs.astral.sh/uv/) は、macOS では Brewfile 経由で、Linux では
+公式のインストーラで `~/.local/bin` に入れます（シェルの設定は書き換えず、`.zshenv` が
+通している PATH に任せます）。
+
 インストール後、ログインシェルを zsh に変更してください。
 
 ```bash
