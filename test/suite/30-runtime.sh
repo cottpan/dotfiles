@@ -296,6 +296,52 @@ else
     skip "hunk-notes のスモークテスト" "python3 が無い"
 fi
 
+# worktree フック (80-review)。source されるものなので、pr-review と
+# __wt_interactive を差し替えて分岐だけを見る。窓は開かない
+if have zsh; then
+    review_hook="$DOTPATH/.zsh/worktree-hooks/80-review"
+    review_hook_stub="
+        __wt_interactive() { return 0 }
+        pr-review() { print CALLED }
+        source '$review_hook'
+    "
+
+    output=$(WT_SOURCE=pr WT_PR_NUMBER=77 WT_PATH="$DOTPATH" TMUX=fake \
+        zsh -c "$review_hook_stub" 2>&1)
+    if printf '%s' "$output" | grep -q CALLED; then
+        ok "80-review が PR の worktree で pr-review を呼ぶ"
+    else
+        fail "80-review が PR の worktree で pr-review を呼ぶ" "$output"
+    fi
+
+    # stdout は wtadd --print-path のものなので、フックは汚してはいけない
+    output=$(WT_SOURCE=pr WT_PR_NUMBER=77 WT_PATH="$DOTPATH" TMUX=fake \
+        zsh -c "$review_hook_stub" 2> /dev/null)
+    if [ -z "$output" ]; then
+        ok "80-review が stdout を汚さない"
+    else
+        fail "80-review が stdout を汚さない" "$output"
+    fi
+
+    output=$(WT_SOURCE=branch WT_PR_NUMBER= WT_PATH="$DOTPATH" TMUX=fake \
+        zsh -c "$review_hook_stub" 2>&1)
+    if printf '%s' "$output" | grep -q CALLED; then
+        fail "80-review が PR 以外では何もしない" "$output"
+    else
+        ok "80-review が PR 以外では何もしない"
+    fi
+
+    output=$(env -u TMUX WT_SOURCE=pr WT_PR_NUMBER=77 WT_PATH="$DOTPATH" \
+        zsh -c "$review_hook_stub" 2>&1)
+    if printf '%s' "$output" | grep -q CALLED; then
+        fail "80-review が tmux の外では何もしない" "$output"
+    else
+        ok "80-review が tmux の外では何もしない"
+    fi
+else
+    skip "80-review フックの分岐" "zsh が無い"
+fi
+
 if have tmux; then
     check "tmux-workspace --help が動く" "$DOTPATH/bin/tmux-workspace" --help
 

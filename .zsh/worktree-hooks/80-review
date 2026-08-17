@@ -1,0 +1,53 @@
+#!/usr/bin/env zsh
+#
+# worktree hook: PR の worktree を作ったら、レビュー用の tmux ウィンドウを開く
+#
+# fprwtree で PR を選ぶ → worktree ができる → hunk + terminal + claude の窓が開く、
+# までを 1 手にする。窓を作るのは bin/pr-review。
+#
+# PR 以外 (fnewtree / fbrwtree など) では何もしない。実装しに行くだけで
+# レビュー窓が要らないときは、下のどちらかで切る。
+#
+#   WTREE_NO_REVIEW=1           一時的に切る
+#   WTREE_HOOKS_SKIP=review     フック機構側で飛ばす
+#
+# あとから開きたくなったら worktree の中で pr-review を叩けばよい。
+#
+
+if [ -n "$WTREE_NO_REVIEW" ]; then
+  return 0
+fi
+
+# PR から作った worktree だけが対象
+if [ "$WT_SOURCE" != "pr" ] || [ -z "$WT_PR_NUMBER" ]; then
+  return 0
+fi
+
+# tmux の外では窓を作れない。pr-review (tmux-workspace) はセッションごと作って
+# attach しようとするので、フックの途中でシェルを奪われないよう先に抜ける
+if [ -z "$TMUX" ]; then
+  return 0
+fi
+
+# スクリプト経由 (bin/wtadd など) では黙って作るだけにする。90-cd と同じ方針
+if ! __wt_interactive; then
+  return 0
+fi
+
+if ! command -v pr-review > /dev/null 2>&1; then
+  print -u2 "⚠️  pr-review が見つかりません (dotfiles の bin が PATH にあるか確認)"
+  return 0
+fi
+
+if [ ! -d "$WT_PATH" ]; then
+  print -u2 "❌ Worktree path not found: $WT_PATH"
+  return 1
+fi
+
+print -u2 "🔍 Opening review window for PR #${WT_PR_NUMBER}..."
+# pr-review は概要を stdout に出すが、stdout は wtadd --print-path のものなので寄せる
+if ! pr-review --pr "$WT_PR_NUMBER" "$WT_PATH" >&2; then
+  print -u2 "⚠️  レビュー窓を開けませんでした (worktree の中で pr-review を叩けば開きます)"
+fi
+
+return 0
