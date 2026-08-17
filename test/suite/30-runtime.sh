@@ -73,6 +73,20 @@ for cmd in rg fd jq gh entr python3 uv harlequin tree-sitter wtfutil glow; do
     fi
 done
 
+# mise で入れるもの。shims は PATH に入れていない (対話シェルでは .zshrc の
+# mise activate が通す) ので、この shell からは mise 経由で見る
+if have mise; then
+    for cmd in hunk; do
+        if mise which "$cmd" > /dev/null 2>&1; then
+            ok "$cmd が入っている (mise)"
+        else
+            skip "$cmd が入っている (mise)" "この環境には無い"
+        fi
+    done
+else
+    skip "mise のツール" "mise が無い"
+fi
+
 if [ "$(uname)" = "Darwin" ]; then
     for cmd in icalBuddy pbcopy; do
         if have "$cmd"; then

@@ -16,6 +16,16 @@ Python の [uv](https://docs.astral.sh/uv/) は、macOS では Brewfile 経由�
 公式のインストーラで `~/.local/bin` に入れます（シェルの設定は書き換えず、`.zshenv` が
 通している PATH に任せます）。
 
+### mise で入れる CLI
+
+`.config/mise/config.toml` の `[tools]` に書いたものは、`make deploy`（`etc/init/install.sh`）が
+`mise install` で入れます。macOS / Linux のどちらにも同じ版が入るので、brew と dnf / apt で
+出来が違うもの・そもそも無いものはここに置きます。PATH は `.zshrc` の `mise activate` が通します。
+
+| ツール | 用途 |
+| --- | --- |
+| [hunk](https://hunk.dev/) | レビュー向けのターミナル diff ビューア（`hunk diff` / `hunk show`） |
+
 ### DB クライアント
 
 ターミナルの SQL クライアントとして [harlequin](https://harlequin.sh/) を、公式が勧める

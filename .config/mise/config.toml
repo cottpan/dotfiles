@@ -1,5 +1,8 @@
 [tools]
 pnpm = "latest"
+# レビュー向けのターミナル diff ビューア (https://hunk.dev)。
+# git difftool / pager としても使える
+hunk = "latest"
 
 [settings]
 trusted_config_paths = ["~/src/dc"]
