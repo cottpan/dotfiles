@@ -12,6 +12,21 @@ Ubuntu の apt に入っている Neovim はプラグインの要求（0.11 以�
 多いため、足りない場合は公式ビルドを `~/.local/nvim` に展開して `~/.local/bin/nvim`
 から参照します。`gh` は標準リポジトリに無いので、GitHub 公式の apt リポジトリを追加します。
 
+Python の [uv](https://docs.astral.sh/uv/) は、macOS では Brewfile 経由で、Linux では
+公式のインストーラで `~/.local/bin` に入れます（シェルの設定は書き換えず、`.zshenv` が
+通している PATH に任せます）。
+
+### DB クライアント
+
+ターミナルの SQL クライアントとして [harlequin](https://harlequin.sh/) を、公式が勧める
+`uv tool install` で入れます（`etc/init/install.sh` の `HARLEQUIN_PACKAGE`）。既定は
+PostgreSQL のアダプタ入り (`harlequin[postgres]`) で、DuckDB / SQLite は本体に入っています。
+他のアダプタが要るときは extras を足して入れ直します。
+
+```bash
+uv tool install --force 'harlequin[postgres,mysql,s3]'
+```
+
 インストール後、ログインシェルを zsh に変更してください。
 
 ```bash

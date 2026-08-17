@@ -97,6 +97,66 @@ if [ -z "$CI" ] && is_linux && ! command -v tree-sitter > /dev/null 2>&1 ; then
     install_tree_sitter_cli || true
 fi
 
+# uv (Python のパッケージ / プロジェクト管理)。macOS は Brewfile で入るが、dnf / apt
+# の版は古かったり無かったりするので、Linux では公式のインストーラを使う。
+# 素で走らせると ~/.zshenv や ~/.zshrc (dotfiles へのシンボリックリンク) に PATH の
+# 設定を書き足してリポジトリを汚すので、それは止めて ~/.local/bin にだけ置く
+# (~/.local/bin は .zshenv が PATH に入れている)
+install_uv() {
+    echo "Installing uv..."
+    if ! curl -fsSL https://astral.sh/uv/install.sh |
+        INSTALLER_NO_MODIFY_PATH=1 UV_INSTALL_DIR="$HOME/.local/bin" sh; then
+        echo "warning: failed to install uv"
+        return 1
+    fi
+    hash -r
+}
+
+if [ -z "$CI" ] && is_linux && ! command -v uv > /dev/null 2>&1 ; then
+    install_uv || true
+fi
+
+# harlequin (ターミナルの SQL クライアント)。公式が uv での導入を勧めているので、
+# uv tool として隔離した環境に入れる (実行ファイルは ~/.local/bin に張られる)。
+# 接続先のアダプタは extras で足す。DuckDB / SQLite は本体に入っている
+HARLEQUIN_PACKAGE="harlequin[postgres]"
+
+# 初回の macOS では brew を入れた直後で、この shell の PATH にまだ載っていない。
+# Fedora も ~/.local/bin を PATH に入れていないので、既知の置き場も見て探す
+find_uv() {
+    local candidate
+    if command -v uv > /dev/null 2>&1; then
+        command -v uv
+        return 0
+    fi
+    for candidate in "$HOME/.local/bin/uv" /opt/homebrew/bin/uv /usr/local/bin/uv; do
+        if [ -x "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+install_harlequin() {
+    local uv
+    if ! uv=$(find_uv); then
+        echo "warning: uv not found; skipping harlequin"
+        return 1
+    fi
+    echo "Installing harlequin..."
+    if ! "$uv" tool install "$HARLEQUIN_PACKAGE"; then
+        echo "warning: failed to install harlequin"
+        return 1
+    fi
+    hash -r
+}
+
+if [ -z "$CI" ] && ! command -v harlequin > /dev/null 2>&1 &&
+    [ ! -x "$HOME/.local/bin/harlequin" ] ; then
+    install_harlequin || true
+fi
+
 # Neovim: lazy.nvim は .config/nvim/init.lua が自前で bootstrap するので、
 # ここでは初回のプラグイン同期だけ済ませておく
 # (mason の LSP サーバは headless では入らないので、初回の nvim 起動時に導入される)
