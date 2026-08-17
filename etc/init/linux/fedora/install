@@ -25,6 +25,7 @@ fedora_java_devel_package() {
 PACKAGES=(
     awscli
     bat
+    btop
     colordiff
     entr
     fd-find

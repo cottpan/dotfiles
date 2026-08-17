@@ -116,6 +116,7 @@ fi
 CANDIDATE_PACKAGES=(
     awscli
     bat
+    btop
     colordiff
     entr
     fd-find

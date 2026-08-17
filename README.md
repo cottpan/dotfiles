@@ -25,6 +25,16 @@ Python の [uv](https://docs.astral.sh/uv/) は、macOS では Brewfile 経由�
 | ツール | 用途 |
 | --- | --- |
 | [hunk](https://hunk.dev/) | レビュー向けのターミナル diff ビューア（`hunk diff` / `hunk show`） |
+| [jnv](https://github.com/ynqa/jnv) | jq の対話版。クエリを打ちながら結果を見る |
+| [lazydocker](https://github.com/jesseduffield/lazydocker) | コンテナ / ログ / リソースの TUI |
+| [yazi](https://yazi-rs.github.io/) | ファイラ。`ya` も一緒に入る |
+
+`btop` は aqua が Linux のバイナリしか持っていないので、mise ではなく Brewfile と
+各ディストロのパッケージで入れます。
+
+PR / issue のダッシュボード [gh-dash](https://github.com/dlvhdr/gh-dash) は gh の拡張として
+入れます（`gh dash` で起動）。未ログインの環境では入らないことがあるので、その場合は
+`gh auth login` のあとに `gh extension install dlvhdr/gh-dash` を実行してください。
 
 ### DB クライアント
 

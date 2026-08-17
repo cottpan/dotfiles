@@ -3,6 +3,12 @@ pnpm = "latest"
 # レビュー向けのターミナル diff ビューア (https://hunk.dev)。
 # git difftool / pager としても使える
 hunk = "latest"
+# jq の対話版。クエリを打ちながら結果を見る
+jnv = "latest"
+# Docker のコンテナ / ログ / リソースを見る TUI
+lazydocker = "latest"
+# ファイラ。画像プレビューは Ghostty でそのまま出る
+yazi = "latest"
 
 [settings]
 trusted_config_paths = ["~/src/dc"]

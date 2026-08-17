@@ -178,6 +178,33 @@ if [ -z "$CI" ] ; then
     install_mise_tools || true
 fi
 
+# gh の拡張。gh-dash (PR / issue のダッシュボード) は mise の registry にも
+# homebrew-core にも無く、本家も gh 拡張としての導入を案内している
+GH_EXTENSIONS="dlvhdr/gh-dash"
+
+install_gh_extensions() {
+    local gh extension installed
+    if ! gh=$(find_bin gh); then
+        echo "warning: gh not found; skipping gh extensions"
+        return 1
+    fi
+    installed=$("$gh" extension list 2> /dev/null || true)
+    for extension in $GH_EXTENSIONS; do
+        case "$installed" in
+            *"$extension"*) continue ;;
+        esac
+        echo "Installing the gh extension ${extension}..."
+        # 未ログインだと API の制限に掛かって落ちることがある。
+        # その時は gh auth login のあとで入れ直せばよいので、ここでは止めない
+        "$gh" extension install "$extension" ||
+            echo "warning: failed to install ${extension} (gh auth login が要るかもしれません)"
+    done
+}
+
+if [ -z "$CI" ] ; then
+    install_gh_extensions || true
+fi
+
 # Neovim: lazy.nvim は .config/nvim/init.lua が自前で bootstrap するので、
 # ここでは初回のプラグイン同期だけ済ませておく
 # (mason の LSP サーバは headless では入らないので、初回の nvim 起動時に導入される)
