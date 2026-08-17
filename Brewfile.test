@@ -28,5 +28,7 @@ brew "tree-sitter-cli"
 brew "uv"
 brew "yt-dlp"
 brew "zplug"
+# 端末フォント (.config/ghostty/config が primary に指定している)
+cask "font-hackgen-nerd"
 cask "font-symbols-only-nerd-font"
 cask "zulu@11"
