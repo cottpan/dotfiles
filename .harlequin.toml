@@ -1,12 +1,25 @@
 # Harlequin (TUI の DB クライアント) の設定
 #
-# 既定のキーマップ "vscode" の上に "mykeys" を重ねて、Quit を C-q から C-t に移す。
+# 既定のキーマップ "vscode" の上に "mykeys" を重ねて、Quit を C-q から C-t に移し、
+# ペイン移動とカーソル移動を vim 風に寄せる。
 # 理由: tmux の prefix が C-q (.tmux.conf) なので、C-q は tmux に吸われて harlequin まで届かない。
 #
 # キーを変えたいときは下の keys を書き換える (対話的に編集するなら `harlequin --keys`)。
 # キー名は Textual の記法 (ctrl+t / f7 / shift+tab ...)。カンマ区切りで複数割り当てられる。
 # vscode キーマップが空けているのは ctrl+t / ctrl+l / f7 / f11 くらい。
 # (ctrl+p は Textual のコマンドパレット、ctrl+d はエディタの delete なので避ける)
+#
+# 重ねたキーマップは「後勝ち」ではない。harlequin は binding を追加するだけで、
+# 同じキーに複数あるときは「フォーカスに近いウィジェットのもの」→「先に登録されたもの」
+# の順に試して、最初に成立したものが勝つ (harlequin/bindings.py, textual/app.py の
+# _check_bindings)。つまり vscode が既に使っているキーは mykeys では奪えない。
+#
+# もう一つ、tmux の中では C-h がそもそも harlequin まで届かない。端末が C-h に送るのは
+# 0x08 で、textual はこれを backspace として読む (_ansi_sequences.py)。C-h と backspace を
+# 見分けるには kitty keyboard protocol か modifyOtherKeys mode 2 が要るが、textual が
+# 要求するのは前者で、tmux 3.7 は後者しか解さない (実測: extended-keys always でも C-h は
+# 0x08 のまま、mode 2 を要求したときだけ \e[104;5u が届く)。
+# 素の Ghostty なら kitty が通るので C-h も届く。
 #
 # 注意: `harlequin --keys` の画面だけは Quit が C-q 固定でこの設定が効かない。
 #       抜けるには tmux 側から literal な C-q を送る必要がある
@@ -91,41 +104,61 @@ key_display = "k"
 # nvim のウィンドウ移動・tmux の prefix h/j/k/l と同じ「方向で動く」形にする。
 #
 #   ┌──────────┬──────────────┐
-#   │          │ エディタ      │   C-h でツリー、C-j で結果
+#   │          │ エディタ      │   C-d でツリー、C-j で結果 (下記のとおり実行を兼ねる)
 #   │ ツリー    ├──────────────┤
-#   │          │ 結果          │   C-k でエディタ、C-h でツリー
+#   │          │ 結果          │   C-k / C-l でエディタ、C-h でツリー
 #   └──────────┴──────────────┘
-#            C-l でエディタ、C-j で結果
 #
-# フォーカスのあるペインの中でだけ効くので、SQL を打っている最中に
-# 別のキーを奪うことはない (C-k はエディタでは既定のバッファ切り替えのまま)。
+# ペインごとの `code_editor.* / data_catalog.* / results_viewer.*` ではなく、
+# アプリ全体の focus_* に割り当てる。理由は 2 つ:
+#   - アプリ全体の binding は最後に見られるので、各ペインの既定を壊さない
+#     (エディタの C-k = バッファ切り替えはそのまま残る)。
+#   - `code_editor.focus_data_catalog` / `code_editor.focus_results_viewer` は
+#     harlequin 2.9.0 では動かない。actions.py がこの 2 つを EditorCollection に
+#     割り当てているのに、実体の action_focus_* は CodeEditor 側にあるので、
+#     キーを押しても何も起きない (harlequin/actions.py, components/code_editor.py)。
+#
+# C-j だけは vscode に先を越されるので、押す場所で意味が変わる:
+#   - エディタ: Run Query (vscode の `ctrl+enter,ctrl+j`)。実行後にフォーカスが
+#     結果へ移るので、結果的には「下のペインへ」動く。
+#   - ツリー:   Insert Name (テーブル名をエディタに挿入してエディタへ移る)。
+# どちらもフォーカスに近いウィジェット側の binding なので、ここでは奪えない。
+# 本当に C-j を空けるには vscode を読み込むのをやめて全キーを自前で書くしかない。
+#
+# C-h は tmux の中では backspace として届く (冒頭の注)。ツリーへ行くのに使えるのは
+# backspace に元の役目が無いペインだけなので、結果の表だけ backspace にも同じ移動を
+# 割り当てて C-h を成立させる。エディタは 1 文字消す動作が先に取るので、代わりに
+# C-d をツリーへの移動に充てる (エディタでは誰も使っていない空きキー)。
+# 結果の表では下の ^d = ページ送りが内側にあって勝つので、そちらは C-h のまま。
 
 [[keymaps.mykeys]]
 keys = "ctrl+h"
-action = "code_editor.focus_data_catalog"
+action = "focus_data_catalog"
 key_display = "^h"
 
 [[keymaps.mykeys]]
+keys = "ctrl+d"
+action = "focus_data_catalog"
+key_display = "^d"
+
+[[keymaps.mykeys]]
 keys = "ctrl+j"
-action = "code_editor.focus_results_viewer"
+action = "focus_results_viewer"
 key_display = "^j"
 
 [[keymaps.mykeys]]
 keys = "ctrl+k"
-action = "results_viewer.focus_query_editor"
+action = "focus_query_editor"
 key_display = "^k"
 
 [[keymaps.mykeys]]
-keys = "ctrl+h"
-action = "results_viewer.focus_data_catalog"
-key_display = "^h"
-
-[[keymaps.mykeys]]
 keys = "ctrl+l"
-action = "data_catalog.focus_query_editor"
+action = "focus_query_editor"
 key_display = "^l"
 
+# 結果の表でだけ。tmux の中で C-h が backspace として届く分を拾う
+# (表では backspace に元々の役目が無いので奪って困らない)。
 [[keymaps.mykeys]]
-keys = "ctrl+j"
-action = "data_catalog.focus_results_viewer"
-key_display = "^j"
+keys = "backspace"
+action = "results_viewer.focus_data_catalog"
+key_display = "^h"
