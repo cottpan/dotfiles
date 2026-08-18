@@ -11,13 +11,76 @@
 # 注意: `harlequin --keys` の画面だけは Quit が C-q 固定でこの設定が効かない。
 #       抜けるには tmux 側から literal な C-q を送る必要がある
 #       (.tmux.conf に `bind q send-prefix` を足すなど)。
+#
+# この dotfiles の約束は「移動 = j/k, 閉じる = q, 検索 = /, ヘルプ = ?」だが、
+# harlequin だけは移動しか揃えられない。SQL を打ち込むアプリなので、
+# アプリ全体に効く quit / help / find を素の q / ? / / に置くと、
+# エディタでその文字が打てなくなるため。
+# 一方 results_viewer (結果の表) と data_catalog (左のツリー) の操作は
+# そのペインにフォーカスがあるときだけ効くので、ここは vim に寄せられる。
 
 default_profile = "mykeys"
 
 [profiles.mykeys]
 keymap_name = ["vscode", "mykeys"]
 
+# --- 全体 -------------------------------------------------------------------
+
 [[keymaps.mykeys]]
 keys = "ctrl+t"
 action = "quit"
 key_display = "^t"
+
+# --- 結果の表 (フォーカスがあるときだけ効く) --------------------------------
+
+[[keymaps.mykeys]]
+keys = "j"
+action = "results_viewer.cursor_down"
+key_display = "j"
+
+[[keymaps.mykeys]]
+keys = "k"
+action = "results_viewer.cursor_up"
+key_display = "k"
+
+[[keymaps.mykeys]]
+keys = "h"
+action = "results_viewer.cursor_left"
+key_display = "h"
+
+[[keymaps.mykeys]]
+keys = "l"
+action = "results_viewer.cursor_right"
+key_display = "l"
+
+[[keymaps.mykeys]]
+keys = "g"
+action = "results_viewer.cursor_table_start"
+key_display = "g"
+
+[[keymaps.mykeys]]
+keys = "G"
+action = "results_viewer.cursor_table_end"
+key_display = "G"
+
+[[keymaps.mykeys]]
+keys = "ctrl+d"
+action = "results_viewer.cursor_page_down"
+key_display = "^d"
+
+[[keymaps.mykeys]]
+keys = "ctrl+u"
+action = "results_viewer.cursor_page_up"
+key_display = "^u"
+
+# --- 左のツリー (フォーカスがあるときだけ効く) ------------------------------
+
+[[keymaps.mykeys]]
+keys = "j"
+action = "data_catalog.cursor_down"
+key_display = "j"
+
+[[keymaps.mykeys]]
+keys = "k"
+action = "data_catalog.cursor_up"
+key_display = "k"
