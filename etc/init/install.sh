@@ -205,6 +205,29 @@ if [ -z "$CI" ] ; then
     install_gh_extensions || true
 fi
 
+# btop のキー操作を vim 側に寄せる (j/k で移動)。
+# btop は終了のたびに設定ファイルを丸ごと書き戻すので、リポジトリから symlink すると
+# 起動するだけで差分が出る。値だけを流し込む
+enable_btop_vim_keys() {
+    local conf
+    conf="${XDG_CONFIG_HOME:-$HOME/.config}/btop/btop.conf"
+    if [ ! -f "$conf" ]; then
+        # 初回起動前は設定ファイルが無い。この 1 行だけ置いておけば、
+        # 残りは btop が初回終了時に書き足す
+        mkdir -p "$(dirname "$conf")"
+        echo "vim_keys = true" > "$conf"
+        return 0
+    fi
+    grep -q '^vim_keys = false' "$conf" || return 0
+    # sed -i の書き方が GNU と BSD で違うので、一時ファイルを経由する
+    sed 's/^vim_keys = false/vim_keys = true/' "$conf" > "$conf.tmp" &&
+        mv "$conf.tmp" "$conf"
+}
+
+if [ -z "$CI" ] ; then
+    enable_btop_vim_keys || echo "warning: failed to set vim_keys in btop.conf"
+fi
+
 # Neovim: lazy.nvim は .config/nvim/init.lua が自前で bootstrap するので、
 # ここでは初回のプラグイン同期だけ済ませておく
 # (mason の LSP サーバは headless では入らないので、初回の nvim 起動時に導入される)

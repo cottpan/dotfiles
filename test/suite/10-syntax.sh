@@ -125,12 +125,15 @@ else
     skip "tmux 設定の読み込み" "tmux が無い"
 fi
 
-# mise の設定 (TOML)
+# TOML の設定 (mise / hunk / yazi / harlequin)。壊れていても起動時に黙って
+# 既定へ落ちるものがあるので、構文だけは通しておく
 if have python3; then
-    check "TOML 構文 .config/mise/config.toml" python3 -c \
-        "import tomllib,sys; tomllib.load(open('$DOTPATH/.config/mise/config.toml','rb'))"
+    for file in $(git -C "$DOTPATH" ls-files '*.toml'); do
+        check "TOML 構文 $file" python3 -c \
+            "import tomllib; tomllib.load(open('$DOTPATH/$file','rb'))"
+    done
 else
-    skip "TOML 構文 .config/mise/config.toml" "python3 が無い"
+    skip "TOML 構文" "python3 が無い"
 fi
 
 # ダッシュボードの設定 (YAML)。PyYAML は標準では入っていないので、あるときだけ見る

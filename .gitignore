@@ -71,6 +71,8 @@
 !/.config/**
 # ダッシュボードで見るリポジトリの一覧。業務のリポジトリ名は公開したくないので手元だけ
 /.config/wtf/*.local
+# hunk が実行中に書く。設定 (config.toml) と違って持ち歩くものではない
+/.config/hunk/state.json
 !/.gitignore_global
 !/.gitconfig_shared
 

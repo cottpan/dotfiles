@@ -14,7 +14,7 @@
 移動	gg / G	ファイルの先頭 / 末尾へ		builtin
 移動	C-d / C-u	半画面ずつスクロール		builtin
 移動	%	対応する括弧へ		builtin
-移動	C-h / C-l	左 / 右のウィンドウへ		custom
+移動	C-h / C-j / C-k / C-l	左 / 下 / 上 / 右のウィンドウへ	tmux の prefix h/j/k/l、harlequin の C-hjkl と同じ並びに揃えてある。	custom
 編集	x / dd	1文字 / 1行を削除	削除した内容はレジスタに入るので p で貼れる。	builtin
 編集	yy / p	1行コピー / 貼り付け		builtin
 編集	u / C-r	取り消し / やり直し		builtin
@@ -42,7 +42,7 @@
 コード	Space gd / gr / gi / gy	定義・参照をプレビュー付きで見る	Glance。飛ばずに中身を確認したい時。	custom
 コード	Space ss / Space sw	シンボルを絞り込んで移動	Namu。関数や変数の一覧から飛ぶ。	custom
 コード	Space ;	パンくずから選んで移動	dropbar。画面上部のパス表示から。	custom
-診断	C-j / C-k	次 / 前の警告・エラーへ		custom
+診断	[d / ]d	前 / 次の警告・エラーへ	括弧の作法 ([b / ]b と同じ)。旧 .vimrc の C-j / C-k はウィンドウ移動に譲った。	custom
 診断	Space d	カーソル位置の診断を詳しく出す		custom
 診断	Space fd	診断の一覧を検索		custom
 Git	]c / [c	次 / 前の変更箇所へ		custom

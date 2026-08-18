@@ -4,7 +4,7 @@
 # 1 ウィンドウ = 1 作業ストリーム。並行作業はウィンドウを増やして切り替える想定。
 #
 #   ┌──────────────┬──────────┐
-#   │ nvim         │ claude   │
+#   │ editor       │ claude   │
 #   ├──────────────┤          │
 #   │ terminal     │          │
 #   └──────────────┴──────────┘
@@ -13,7 +13,9 @@
 #   tmux-workspace ~/src/dc/foo       指定したディレクトリで開く
 #   tmux-workspace -n api ~/src/x     ウィンドウ名を指定する
 #   tmux-workspace --editor lazygit   エディタのペインを別のものにする
+#   tmux-workspace --no-editor        エディタのペインは素のシェルにする
 #   tmux-workspace --agent zsh        エージェントのペインを別のものにする
+#   tmux-workspace --no-agent         エージェントのペインは素のシェルにする
 #
 # 呼ぶたびに新しいウィンドウを作る。同じディレクトリでも並行して作業できる。
 #
@@ -27,6 +29,10 @@ set -eu
 name=""
 editor_override=""
 agent_override=""
+# 「起動しない」は空文字では表せない (空なら tmux オプションと既定に落ちる) ので、
+# 別のフラグで持つ
+no_editor=0
+no_agent=0
 while [ $# -gt 0 ]; do
     case $1 in
         -n)
@@ -37,12 +43,20 @@ while [ $# -gt 0 ]; do
             editor_override=${2:?"--editor needs a command"}
             shift 2
             ;;
+        --no-editor)
+            no_editor=1
+            shift
+            ;;
         --agent)
             agent_override=${2:?"--agent needs a command"}
             shift 2
             ;;
+        --no-agent)
+            no_agent=1
+            shift
+            ;;
         -h | --help)
-            sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
@@ -65,6 +79,13 @@ option() {
 
 editor=${editor_override:-$(option @workspace-editor "nvim")}
 agent=${agent_override:-$(option @workspace-agent "claude")}
+# set -e があるので [ ... ] && var= とは書かない (条件が偽のとき止まってしまう)
+if [ "$no_editor" -eq 1 ]; then
+    editor=""
+fi
+if [ "$no_agent" -eq 1 ]; then
+    agent=""
+fi
 agent_percent=$(option @workspace-agent-percent "30")
 terminal_percent=$(option @workspace-terminal-percent "20")
 
@@ -85,8 +106,13 @@ layout() {
         tmux split-window -v -l "${terminal_percent}%" -c "$dir" -t "$editor_pane" > /dev/null
     fi
 
-    tmux send-keys -t "$editor_pane" "$editor" Enter
-    tmux send-keys -t "$agent_pane" "$agent" Enter
+    # 空なら何も起動せず、素のシェルのまま置いておく (--no-editor / --no-agent)
+    if [ -n "$editor" ]; then
+        tmux send-keys -t "$editor_pane" "$editor" Enter
+    fi
+    if [ -n "$agent" ]; then
+        tmux send-keys -t "$agent_pane" "$agent" Enter
+    fi
     tmux select-pane -t "$editor_pane"
 }
 
