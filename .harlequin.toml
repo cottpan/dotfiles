@@ -84,3 +84,48 @@ key_display = "j"
 keys = "k"
 action = "data_catalog.cursor_up"
 key_display = "k"
+
+# --- ペイン移動 -------------------------------------------------------------
+#
+# 既定は F2 (エディタ) / F5 (結果) / F6 (ツリー) で、どれがどれか覚えられない。
+# nvim のウィンドウ移動・tmux の prefix h/j/k/l と同じ「方向で動く」形にする。
+#
+#   ┌──────────┬──────────────┐
+#   │          │ エディタ      │   C-h でツリー、C-j で結果
+#   │ ツリー    ├──────────────┤
+#   │          │ 結果          │   C-k でエディタ、C-h でツリー
+#   └──────────┴──────────────┘
+#            C-l でエディタ、C-j で結果
+#
+# フォーカスのあるペインの中でだけ効くので、SQL を打っている最中に
+# 別のキーを奪うことはない (C-k はエディタでは既定のバッファ切り替えのまま)。
+
+[[keymaps.mykeys]]
+keys = "ctrl+h"
+action = "code_editor.focus_data_catalog"
+key_display = "^h"
+
+[[keymaps.mykeys]]
+keys = "ctrl+j"
+action = "code_editor.focus_results_viewer"
+key_display = "^j"
+
+[[keymaps.mykeys]]
+keys = "ctrl+k"
+action = "results_viewer.focus_query_editor"
+key_display = "^k"
+
+[[keymaps.mykeys]]
+keys = "ctrl+h"
+action = "results_viewer.focus_data_catalog"
+key_display = "^h"
+
+[[keymaps.mykeys]]
+keys = "ctrl+l"
+action = "data_catalog.focus_query_editor"
+key_display = "^l"
+
+[[keymaps.mykeys]]
+keys = "ctrl+j"
+action = "data_catalog.focus_results_viewer"
+key_display = "^j"
