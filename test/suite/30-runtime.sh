@@ -323,7 +323,7 @@ if have zsh; then
         fail "80-review が stdout を汚さない" "$output"
     fi
 
-    output=$(WT_SOURCE=branch WT_PR_NUMBER= WT_PATH="$DOTPATH" TMUX=fake \
+    output=$(WT_SOURCE=branch WT_PR_NUMBER='' WT_PATH="$DOTPATH" TMUX=fake \
         zsh -c "$review_hook_stub" 2>&1)
     if printf '%s' "$output" | grep -q CALLED; then
         fail "80-review が PR 以外では何もしない" "$output"
