@@ -193,6 +193,14 @@ if have tmux; then
     else
         fail "default-terminal が tmux-256color" "default-terminal=$term"
     fi
+
+    # 作業ウィンドウ (C) はエディタを起動しない。--no-editor が落ちると
+    # 何も言わずに nvim が立ち上がるので、キーの中身まで見る
+    workspace_key=$(tmux -L "$socket" list-keys -T prefix 2> /dev/null | grep "tmux-workspace")
+    case $workspace_key in
+        *--no-editor*) ok "C が --no-editor で作業ウィンドウを開く" ;;
+        *) fail "C が --no-editor で作業ウィンドウを開く" "$workspace_key" ;;
+    esac
     tmux -L "$socket" kill-server 2> /dev/null || true
 else
     skip "tmux の設定値" "tmux が無い"
