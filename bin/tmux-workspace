@@ -9,13 +9,15 @@
 #   │ terminal     │          │
 #   └──────────────┴──────────┘
 #
-#   tmux-workspace                 カレントディレクトリで開く
-#   tmux-workspace ~/src/dc/foo    指定したディレクトリで開く
-#   tmux-workspace -n api ~/src/x  ウィンドウ名を指定する
+#   tmux-workspace                    カレントディレクトリで開く
+#   tmux-workspace ~/src/dc/foo       指定したディレクトリで開く
+#   tmux-workspace -n api ~/src/x     ウィンドウ名を指定する
+#   tmux-workspace --editor lazygit   エディタのペインを別のものにする
+#   tmux-workspace --agent zsh        エージェントのペインを別のものにする
 #
 # 呼ぶたびに新しいウィンドウを作る。同じディレクトリでも並行して作業できる。
 #
-# 中で使うコマンドは tmux のオプションで変えられる:
+# 中で使うコマンドは tmux のオプションでも変えられる (--editor / --agent が優先):
 #   set -g @workspace-editor "nvim ."
 #   set -g @workspace-agent  "claude --continue"
 #   set -g @workspace-agent-percent 40
@@ -23,14 +25,24 @@
 set -eu
 
 name=""
+editor_override=""
+agent_override=""
 while [ $# -gt 0 ]; do
     case $1 in
         -n)
             name=${2:?"-n needs a window name"}
             shift 2
             ;;
+        --editor)
+            editor_override=${2:?"--editor needs a command"}
+            shift 2
+            ;;
+        --agent)
+            agent_override=${2:?"--agent needs a command"}
+            shift 2
+            ;;
         -h | --help)
-            sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
@@ -51,8 +63,8 @@ option() {
     if [ -n "$value" ]; then printf '%s' "$value"; else printf '%s' "$2"; fi
 }
 
-editor=$(option @workspace-editor "nvim")
-agent=$(option @workspace-agent "claude")
+editor=${editor_override:-$(option @workspace-editor "nvim")}
+agent=${agent_override:-$(option @workspace-agent "claude")}
 agent_percent=$(option @workspace-agent-percent "30")
 terminal_percent=$(option @workspace-terminal-percent "20")
 

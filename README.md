@@ -61,6 +61,52 @@ LSP サーバは mason 経由で導入されるため、初回起動後 `:Mason`
 
 `.vimrc` は sudo 時など vim しか無い環境向けに、プラグイン非依存の最小設定だけを残しています。
 
+## PR レビュー
+
+PR ごとに worktree を作り、[hunk](https://hunk.dev/) の diff にエージェントの解説を
+付けながら読むための道具立てです。
+
+```bash
+fprwtree                 # PR を fzf で選んで worktree を作る (既存の zsh 関数)
+pr-review                # その worktree をレビュー用ウィンドウで開く
+```
+
+`pr-review` はレビュー専用の tmux ウィンドウを作ります（`tmux-workspace --editor` で
+エディタのペインを hunk に差し替えたもの）。
+
+```
+┌────────────────────┬──────────┐
+│ hunk diff          │ claude   │
+├────────────────────┤          │
+│ terminal           │          │
+└────────────────────┴──────────┘
+```
+
+worktree のパス (`<親>/<リポジトリ>.worktree/pr-<番号>-<ブランチ>`) から PR 番号を拾い、
+マージ先は `gh pr view` で引いて `origin/<base>...HEAD` を開きます。`fprwtree` が
+`wtadd` に渡す `--base` は PR の head なので、そこは当てになりません。
+
+### 注釈は JSON を正とする
+
+hunk の注釈にはライブ (`hunk session comment apply`) とファイル (`--agent-context`) の
+二通りの入り口があり、ライブはセッションを閉じると消えます。そこで置き場を決めておき、
+エージェントにはそこへ書かせます。
+
+```
+${XDG_STATE_HOME:-~/.local/state}/hunk-review/<リポジトリ>/pr-<番号>.json
+```
+
+`pr-review` はこれがあれば `--agent-context` で読み込むので、次に開いたときも解説が出ます
+（worktree を消しても残ります）。開いている最中に反映したいときは `hunk-notes` を使います。
+
+```bash
+pr-review --print-notes                     # 置き場を出す (エージェントに渡す)
+hunk-notes <notes.json> --replace --focus   # JSON を今開いている hunk に流し込む
+```
+
+同じ worktree に対して `pr-review` を二度呼んでも窓は増えず、開いている hunk の中身を
+差し替えます（同一リポジトリに hunk が 2 つあると `--repo` の指定が曖昧になるため）。
+
 ## Test
 
 ```bash

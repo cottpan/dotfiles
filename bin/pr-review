@@ -1,0 +1,226 @@
+#!/usr/bin/env sh
+# PR の worktree を hunk で開く。レビュー専用の tmux ウィンドウを作る。
+#
+#   ┌────────────────────┬──────────┐
+#   │ hunk diff          │ claude   │
+#   ├────────────────────┤          │
+#   │ terminal           │          │
+#   └────────────────────┴──────────┘
+#
+#   pr-review                   PR の worktree を選ぶ (cwd がそれならそのまま)
+#   pr-review <path>            worktree を指定する
+#   pr-review --pr 123          PR 番号を明示する (パスから拾えないとき)
+#   pr-review --range a...b     diff の範囲を明示する (gh を呼ばない)
+#   pr-review --print-notes     注釈 JSON の置き場だけ出す
+#   pr-review --dry-run         開かずに、実行するコマンドを出す
+#
+# worktree を作るのは fprwtree で、こちらは「開く」だけ。
+# hunk が既にその worktree を開いていれば、窓を増やさず中身を差し替える。
+#
+# 注釈 (agent-context 形式の JSON) の置き場:
+#   ${XDG_STATE_HOME:-~/.local/state}/hunk-review/<リポジトリ>/pr-<番号>.json
+# あれば --agent-context で読み込む。worktree を消しても残るので、
+# エージェントに書かせた解説は次に開いたときもそのまま出る。
+
+set -eu
+
+pr=""
+range=""
+notes=""
+name=""
+print_notes=0
+dry_run=0
+
+die() {
+    echo "pr-review: $1" >&2
+    exit 1
+}
+
+while [ $# -gt 0 ]; do
+    case $1 in
+        --pr)
+            pr=${2:?"--pr needs a number"}
+            shift 2
+            ;;
+        --range)
+            range=${2:?"--range needs a git range"}
+            shift 2
+            ;;
+        --notes)
+            notes=${2:?"--notes needs a path"}
+            shift 2
+            ;;
+        -n)
+            name=${2:?"-n needs a window name"}
+            shift 2
+            ;;
+        --print-notes)
+            print_notes=1
+            shift
+            ;;
+        --dry-run)
+            dry_run=1
+            shift
+            ;;
+        -h | --help)
+            sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        -*)
+            die "unknown option: $1"
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# --- worktree を決める -------------------------------------------------------
+
+# <親>/<リポジトリ>.worktree/pr-123-feat/x → pr-123-feat
+# ブランチ名に / が入ると worktree のパスも階層になるので、basename では拾えない
+worktree_label() {
+    case $1 in
+        *.worktree/*)
+            rest=${1#*.worktree/}
+            printf '%s' "${rest%%/*}"
+            ;;
+        *)
+            basename "$1"
+            ;;
+    esac
+}
+
+is_pr_worktree() {
+    case $(worktree_label "$1") in
+        pr-[0-9]*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# git worktree list からこのリポジトリの PR worktree を並べる
+list_pr_worktrees() {
+    git worktree list --porcelain 2> /dev/null |
+        while IFS= read -r line; do
+            case $line in
+                "worktree "*) path=${line#worktree } ;;
+                *) continue ;;
+            esac
+            if is_pr_worktree "$path"; then
+                echo "$path"
+            fi
+        done
+}
+
+dir=${1:-}
+if [ -z "$dir" ]; then
+    top=$(git rev-parse --show-toplevel 2> /dev/null) ||
+        die "git リポジトリの中で実行するか、worktree のパスを渡してください"
+    if is_pr_worktree "$top"; then
+        dir=$top
+    else
+        candidates=$(list_pr_worktrees)
+        count=$(printf '%s' "$candidates" | grep -c . || true)
+        if [ "$count" -eq 0 ]; then
+            die "PR の worktree が見つかりません (先に fprwtree で作ってください)"
+        elif [ "$count" -eq 1 ]; then
+            dir=$candidates
+        elif command -v fzf > /dev/null 2>&1; then
+            dir=$(printf '%s\n' "$candidates" |
+                fzf --prompt="PR worktree > " --reverse --border) || exit 0
+        else
+            echo "pr-review: どの worktree か決められません:" >&2
+            printf '%s\n' "$candidates" >&2
+            exit 1
+        fi
+    fi
+fi
+
+[ -d "$dir" ] || die "no such directory: $dir"
+dir=$(cd "$dir" && pwd -P)
+
+# --- PR 番号とリポジトリ名 ---------------------------------------------------
+
+if [ -z "$pr" ]; then
+    label=$(worktree_label "$dir")
+    case $label in
+        pr-[0-9]*) pr=$(printf '%s' "$label" | sed 's/^pr-\([0-9][0-9]*\).*/\1/') ;;
+        *) die "PR 番号が分かりません (--pr で渡してください): $label" ;;
+    esac
+fi
+
+# worktree からでも本体の .git を辿ってリポジトリ名を取る
+common=$(git -C "$dir" rev-parse --git-common-dir)
+case $common in
+    /*) ;;
+    *) common=$dir/$common ;;
+esac
+repo=$(basename "$(cd "$common/.." && pwd -P)")
+
+if [ -z "$notes" ]; then
+    notes="${XDG_STATE_HOME:-$HOME/.local/state}/hunk-review/$repo/pr-$pr.json"
+fi
+
+if [ "$print_notes" -eq 1 ]; then
+    mkdir -p "$(dirname "$notes")"
+    echo "$notes"
+    exit 0
+fi
+
+# --- diff の範囲 -------------------------------------------------------------
+
+# fprwtree が wtadd に渡す --base は PR の head なので、マージ先はここで引く
+if [ -z "$range" ]; then
+    command -v gh > /dev/null 2>&1 ||
+        die "gh が無いので base ブランチを引けません (--range で渡してください)"
+    base=$(cd "$dir" && gh pr view "$pr" --json baseRefName -q .baseRefName 2> /dev/null) ||
+        die "PR #$pr の base ブランチを引けませんでした (--range で渡してください)"
+    [ -n "$base" ] || die "PR #$pr の base ブランチが空でした (--range で渡してください)"
+    if ! git -C "$dir" rev-parse --verify --quiet "origin/$base" > /dev/null; then
+        echo "Fetching origin/$base..."
+        git -C "$dir" fetch origin "$base"
+    fi
+    range="origin/$base...HEAD"
+fi
+
+# --- hunk ------------------------------------------------------------------
+
+hunk_bin=$(command -v hunk 2> /dev/null || true)
+if [ -z "$hunk_bin" ] && command -v mise > /dev/null 2>&1; then
+    hunk_bin=$(mise which hunk 2> /dev/null || true)
+fi
+[ -n "$hunk_bin" ] || die "hunk が見つかりません (mise install で入ります)"
+
+hunk_cmd="'$hunk_bin' diff '$range' --agent-notes"
+if [ -f "$notes" ]; then
+    hunk_cmd="$hunk_cmd --agent-context '$notes'"
+fi
+
+if [ "$dry_run" -eq 1 ]; then
+    echo "worktree: $dir"
+    echo "notes:    $notes$([ -f "$notes" ] || echo ' (まだ無い)')"
+    echo "command:  $hunk_cmd"
+    exit 0
+fi
+
+# 同じ repo に hunk が 2 つ生きていると session の --repo 指定が曖昧になるので、
+# 既に開いている窓があれば増やさずに中身を差し替える
+if "$hunk_bin" session get --repo "$dir" > /dev/null 2>&1; then
+    "$hunk_bin" session reload --repo "$dir" -- diff "$range" > /dev/null
+    echo "既に開いている hunk を PR #$pr に差し替えました"
+else
+    workspace=$(dirname "$0")/tmux-workspace
+    [ -x "$workspace" ] || workspace=tmux-workspace
+    "$workspace" --editor "$hunk_cmd" -n "${name:-pr-$pr}" "$dir"
+fi
+
+cat <<EOF
+PR #$pr  ($repo)
+  worktree: $dir
+  range:    $range
+  notes:    $notes$([ -f "$notes" ] || echo " (まだ無い)")
+
+エージェントに解説させるときは、claude のペインでこう頼む:
+  hunk の skill を読んで、この PR を解説しながら注釈を付けて。
+  注釈は $notes に agent-context 形式で書いて、hunk-notes --replace で反映して。
+EOF

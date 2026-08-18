@@ -250,8 +250,104 @@ fi
 
 # --- bin のスモークテスト ---------------------------------------------------
 
+check "pr-review --help が動く" "$DOTPATH/bin/pr-review" --help
+
+# PR の worktree だと分からない場所を渡したら、黙って開かずエラーにする
+if output=$("$DOTPATH/bin/pr-review" --dry-run "$DOTPATH" 2>&1); then
+    fail "pr-review が PR 以外の場所で失敗する" "エラーにならなかった: $output"
+else
+    ok "pr-review が PR 以外の場所で失敗する"
+fi
+
+if have python3; then
+    check "hunk-notes --help が動く" "$DOTPATH/bin/hunk-notes" --help
+
+    # agent-context の注釈が、ライブ注釈の形 (行指定) に移ること。
+    # ここがずれると注釈が別の行に付く / 黙って落ちる
+    notes_json=$(mktemp "${TMPDIR:-/tmp}/dotfiles-test-notes.XXXXXX") || notes_json=""
+    if [ -n "$notes_json" ]; then
+        cat > "$notes_json" <<'JSON'
+{"version": 1,
+ "files": [{"path": "a.txt",
+            "annotations": [{"newRange": [12, 20], "summary": "s", "rationale": "r"}]}]}
+JSON
+        output=$("$DOTPATH/bin/hunk-notes" "$notes_json" --dry-run 2>&1)
+        if printf '%s' "$output" | grep -q '"newLine": 12' &&
+            printf '%s' "$output" | grep -q '"filePath": "a.txt"'; then
+            ok "hunk-notes が newRange を行指定に移す"
+        else
+            fail "hunk-notes が newRange を行指定に移す" "$output"
+        fi
+
+        # 位置の無い注釈は黙って捨てずにエラーにする
+        cat > "$notes_json" <<'JSON'
+{"files": [{"path": "a.txt", "annotations": [{"summary": "位置が無い"}]}]}
+JSON
+        if output=$("$DOTPATH/bin/hunk-notes" "$notes_json" --dry-run 2>&1); then
+            fail "hunk-notes が位置の無い注釈で失敗する" "エラーにならなかった: $output"
+        else
+            ok "hunk-notes が位置の無い注釈で失敗する"
+        fi
+        rm -f "$notes_json"
+    else
+        skip "hunk-notes の変換" "一時ファイルを作れない"
+    fi
+else
+    skip "hunk-notes のスモークテスト" "python3 が無い"
+fi
+
+# worktree フック (80-review)。source されるものなので、pr-review と
+# __wt_interactive を差し替えて分岐だけを見る。窓は開かない
+if have zsh; then
+    review_hook="$DOTPATH/.zsh/worktree-hooks/80-review"
+    review_hook_stub="
+        __wt_interactive() { return 0 }
+        pr-review() { print CALLED }
+        source '$review_hook'
+    "
+
+    output=$(WT_SOURCE=pr WT_PR_NUMBER=77 WT_PATH="$DOTPATH" TMUX=fake \
+        zsh -c "$review_hook_stub" 2>&1)
+    if printf '%s' "$output" | grep -q CALLED; then
+        ok "80-review が PR の worktree で pr-review を呼ぶ"
+    else
+        fail "80-review が PR の worktree で pr-review を呼ぶ" "$output"
+    fi
+
+    # stdout は wtadd --print-path のものなので、フックは汚してはいけない
+    output=$(WT_SOURCE=pr WT_PR_NUMBER=77 WT_PATH="$DOTPATH" TMUX=fake \
+        zsh -c "$review_hook_stub" 2> /dev/null)
+    if [ -z "$output" ]; then
+        ok "80-review が stdout を汚さない"
+    else
+        fail "80-review が stdout を汚さない" "$output"
+    fi
+
+    output=$(WT_SOURCE=branch WT_PR_NUMBER='' WT_PATH="$DOTPATH" TMUX=fake \
+        zsh -c "$review_hook_stub" 2>&1)
+    if printf '%s' "$output" | grep -q CALLED; then
+        fail "80-review が PR 以外では何もしない" "$output"
+    else
+        ok "80-review が PR 以外では何もしない"
+    fi
+
+    output=$(env -u TMUX WT_SOURCE=pr WT_PR_NUMBER=77 WT_PATH="$DOTPATH" \
+        zsh -c "$review_hook_stub" 2>&1)
+    if printf '%s' "$output" | grep -q CALLED; then
+        fail "80-review が tmux の外では何もしない" "$output"
+    else
+        ok "80-review が tmux の外では何もしない"
+    fi
+else
+    skip "80-review フックの分岐" "zsh が無い"
+fi
+
 if have tmux; then
     check "tmux-workspace --help が動く" "$DOTPATH/bin/tmux-workspace" --help
+
+    # --editor / --agent が渡せること (pr-review が hunk を差し込むのに使う)
+    check "tmux-workspace が --editor を受ける" \
+        sh -c "'$DOTPATH/bin/tmux-workspace' --help | grep -q -- --editor"
 else
     skip "tmux-workspace --help" "tmux が無い"
 fi

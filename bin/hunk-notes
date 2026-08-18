@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""agent-context 形式の注釈 JSON を、動いている hunk セッションに流し込む。
+
+hunk の注釈には二通りの入り口がある。
+
+  - ライブ: hunk session comment apply。すぐ出るが、セッションを閉じると消える
+  - ファイル: hunk diff --agent-context notes.json。残るが、開き直さないと反映されない
+
+どちらか一方で運用すると「対話で付けた解説が消える」か「解説が出るまで開き直す」
+のどちらかを踏むので、JSON を唯一の正として、そこからライブへ流す形にする。
+エージェントは JSON を書き、これを呼ぶ。次に pr-review で開くときは --agent-context
+で同じ内容が出る。
+
+Usage:
+  hunk-notes <notes.json> [--repo <path>] [--replace] [--focus] [--dry-run]
+
+  --repo <path>   対象の hunk セッション (既定: カレントディレクトリ)
+  --replace       流し込む前に、そのセッションの既存の注釈を消す
+  --focus         最初の注釈に視点を飛ばす
+  --dry-run       流し込まず、組み立てたバッチを出す
+
+JSON の形 (hunk の agent-context と同じ):
+  {"version": 1,
+   "summary": "PR 全体の要約",
+   "files": [{"path": "src/a.ts",
+              "summary": "このファイルの役割",
+              "annotations": [{"newRange": [10, 20],
+                               "summary": "ここが肝",
+                               "rationale": "なぜそうしたか",
+                               "author": "claude"}]}]}
+
+annotations の位置は newRange / oldRange / newLine / oldLine / hunk のいずれか。
+range を渡した場合は、その先頭行に注釈が付く (hunk のライブ注釈は行単位)。
+"""
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+
+def find_hunk() -> str:
+    """hunk の実行ファイルを探す。mise 管理下は PATH に載っていないことがある。"""
+    found = shutil.which("hunk")
+    if found:
+        return found
+    if shutil.which("mise"):
+        result = subprocess.run(
+            ["mise", "which", "hunk"], capture_output=True, text=True, check=False
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    sys.exit("hunk-notes: hunk が見つかりません (mise install で入ります)")
+
+
+def target_of(annotation: dict) -> dict:
+    """agent-context の位置指定を、ライブ注釈の位置指定に移す。"""
+    for key in ("newLine", "oldLine", "hunk", "hunkNumber"):
+        if annotation.get(key) is not None:
+            return {key: annotation[key]}
+    for key, line_key in (("newRange", "newLine"), ("oldRange", "oldLine")):
+        value = annotation.get(key)
+        if isinstance(value, (list, tuple)) and value:
+            return {line_key: value[0]}
+    return {}
+
+
+def to_batch(context: dict) -> list:
+    comments = []
+    for entry in context.get("files", []):
+        path = entry.get("path")
+        if not path:
+            continue
+        for annotation in entry.get("annotations", []):
+            summary = annotation.get("summary")
+            target = target_of(annotation)
+            if not summary or not target:
+                sys.exit(
+                    f"hunk-notes: {path} の注釈に summary か位置がありません: {annotation!r}"
+                )
+            comment = {"filePath": path, "summary": summary, **target}
+            for key in ("rationale", "author", "markup"):
+                if annotation.get(key):
+                    comment[key] = annotation[key]
+            comments.append(comment)
+    return comments
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("notes", nargs="?")
+    parser.add_argument("--repo", default=".")
+    parser.add_argument("--replace", action="store_true")
+    parser.add_argument("--focus", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("-h", "--help", action="store_true")
+    args = parser.parse_args()
+
+    if args.help or not args.notes:
+        print(__doc__.strip())
+        sys.exit(0 if args.help else 2)
+
+    if not os.path.isfile(args.notes):
+        sys.exit(f"hunk-notes: no such file: {args.notes}")
+    with open(args.notes, encoding="utf-8") as handle:
+        try:
+            context = json.load(handle)
+        except json.JSONDecodeError as error:
+            sys.exit(f"hunk-notes: {args.notes} が JSON として読めません: {error}")
+
+    comments = to_batch(context)
+    if not comments:
+        sys.exit(f"hunk-notes: {args.notes} に注釈がありません")
+
+    payload = json.dumps({"comments": comments}, ensure_ascii=False)
+    if args.dry_run:
+        print(payload)
+        return
+
+    hunk = find_hunk()
+    repo = os.path.abspath(args.repo)
+
+    if args.replace:
+        subprocess.run(
+            [hunk, "session", "comment", "clear", "--repo", repo, "--yes"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+        )
+
+    command = [hunk, "session", "comment", "apply", "--repo", repo, "--stdin"]
+    if args.focus:
+        command.append("--focus")
+    result = subprocess.run(command, input=payload, text=True, check=False)
+    if result.returncode != 0:
+        sys.exit(
+            "hunk-notes: 流し込みに失敗しました。"
+            "hunk がその worktree を開いているか (hunk session list) を確認してください"
+        )
+    print(f"{len(comments)} 件の注釈を反映しました ({args.notes})")
+
+
+if __name__ == "__main__":
+    main()
