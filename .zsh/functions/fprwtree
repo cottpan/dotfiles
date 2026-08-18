@@ -32,7 +32,7 @@ fprwtree() {
   local prs selected_pr pr_number branch_name wt_path
 
   echo "🔍 Fetching pull requests..."
-  prs=$(gh pr list --state open --limit 50 --json number,title,author,headRefName --template '{{range .}}#{{.number}} | {{.title}} | @{{.author.login}} | {{.headRefName}}{{"\n"}}{{end}}')
+  prs=$(gh pr list --state open --limit 200 --json number,title,author,headRefName --template '{{range .}}#{{.number}} | {{.title}} | @{{.author.login}} | {{.headRefName}}{{"\n"}}{{end}}')
 
   if [ -z "$prs" ]; then
     echo "📭 No open pull requests found"
