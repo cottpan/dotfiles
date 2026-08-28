@@ -143,11 +143,110 @@ return {
     opts = {},
   },
 
-  -- Markdown をバッファ内で整形して表示する
+  -- Markdown をバッファ内で整形して表示する。
+  --
+  -- 既定は見出し 1〜6 をそれぞれ別色の「背景ブロック」で描く
+  -- (MarkviewHeading{N} -> MarkviewPalette{N} = Normal の bg に見出し色を 25% 混ぜた帯)。
+  -- solarized dark だと帯が濁って本文より読みにくいので、glow (charmbracelet) の
+  -- dark スタイル相当まで装飾量を落とす:
+  --   h1 だけ帯、h2〜h5 は `##` を残した青の太字、h6 は緑・太字なし。
   {
     "OXY2DEV/markview.nvim",
     ft = { "markdown", "quarto", "rmd", "codecompanion" },
     dependencies = { "nvim-tree/nvim-web-devicons" },
-    opts = {},
+    config = function()
+      -- markview の MarkviewHeading* は ColorScheme のたびに MarkviewPalette* へ
+      -- 貼り替えられ、opts.highlight_groups は現行 commit では配線されていないので、
+      -- 衝突しない独自名のグループを自前で張る (`:colorscheme` で消えるため再作成も自分で)。
+      local function heading_hl()
+        local set = vim.api.nvim_set_hl
+        -- glow の dark スタイルを solarized のパレットに置き換えたもの
+        set(0, "MdHeading1", { fg = "#fdf6e3", bg = "#6c71c4", bold = true }) -- base3 on violet
+        set(0, "MdHeading2", { fg = "#268bd2", bold = true }) -- blue
+        set(0, "MdHeading3", { fg = "#268bd2", bold = true })
+        set(0, "MdHeading4", { fg = "#268bd2", bold = true })
+        set(0, "MdHeading5", { fg = "#268bd2", bold = true })
+        set(0, "MdHeading6", { fg = "#859900" }) -- green (glow に合わせて太字なし)
+        -- setext (`===` 下線) 見出し用。simple スタイルは line_hl_group で行全体を塗るので、
+        -- h1 の帯をそのまま使うと画面端まで violet になる。色だけ借りる。
+        set(0, "MdHeadingSetext1", { fg = "#6c71c4", bold = true })
+      end
+
+      heading_hl()
+      vim.api.nvim_create_autocmd("ColorScheme", {
+        group = vim.api.nvim_create_augroup("MarkviewHeadingHl", { clear = true }),
+        callback = heading_hl,
+      })
+
+      require("markview").setup({
+        markdown = {
+          headings = {
+            shift_width = 0, -- 見出しをレベル分インデントしない
+
+            -- h1 は `#` を隠して前後に空白を足した帯にする (glow の h1 相当)
+            heading_1 = {
+              style = "label",
+              sign = false,
+              padding_left = " ",
+              padding_right = " ",
+              icon = "",
+              hl = "MdHeading1",
+            },
+
+            -- h2 以降は記号を残したまま行に色を乗せるだけ
+            heading_2 = { style = "simple", sign = false, hl = "MdHeading2" },
+            heading_3 = { style = "simple", hl = "MdHeading3" },
+            heading_4 = { style = "simple", hl = "MdHeading4" },
+            heading_5 = { style = "simple", hl = "MdHeading5" },
+            heading_6 = { style = "simple", hl = "MdHeading6" },
+
+            setext_1 = { style = "simple", sign = false, hl = "MdHeadingSetext1" },
+            setext_2 = { style = "simple", sign = false, hl = "MdHeading2" },
+          },
+
+          -- 箇条書きの記号を glow と同じ中黒に揃える (既定は ● / ◈ / ◇ で階層ごとに別記号)
+          list_items = {
+            marker_minus = { text = "•" },
+            marker_plus = { text = "•" },
+            marker_star = { text = "•" },
+          },
+
+          -- 引用は太いブロックではなく細い縦線
+          block_quotes = {
+            default = { border = "│" },
+          },
+
+          -- `---` は既定だと虹色グラデーション + 中央にアイコンなので、ただの罫線にする。
+          -- 既定の parts は 3 要素で、tbl_deep_extend が index ごとに混ぜてしまうため、
+          -- 2/3 番目も明示的に無効化する。
+          horizontal_rules = {
+            parts = {
+              {
+                type = "repeating",
+                direction = "left",
+                repeat_amount = function()
+                  return vim.o.columns
+                end,
+                text = "─",
+                hl = "Comment",
+              },
+              { type = "text", text = "", hl = "Comment" },
+              {
+                type = "repeating",
+                direction = "right",
+                repeat_amount = function()
+                  return 0
+                end,
+                text = "─",
+                hl = "Comment",
+              },
+            },
+          },
+
+          -- テーブルは 1 本線の罫線 (既定は太さの違う複合罫線)
+          tables = require("markview.presets").tables.single,
+        },
+      })
+    end,
   },
 }
