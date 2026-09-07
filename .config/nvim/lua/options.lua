@@ -24,6 +24,13 @@ opt.hlsearch = true
 opt.ignorecase = true
 opt.smartcase = true -- 大文字を含む検索のときだけ大文字小文字を区別する
 
+-- クリップボード
+-- yank / delete / change をシステムのクリップボードと連動させる (macOS は pbcopy を使う)。
+-- レジスタを使い分けるより「普通のエディタと同じ」を優先した選択。副作用として d / x /
+-- c もクリップボードを上書きするので、意識せず消したいときだけ "_ (ブラックホール) に流す
+-- (visual の p は keymaps.lua で対処済み)。
+opt.clipboard = "unnamedplus"
+
 -- ファイル
 opt.hidden = true -- 変更中のファイルでも、保存しないで他のファイルを表示する
 opt.undofile = true -- undo 履歴を永続化する (backup/swap は Neovim 既定の state ディレクトリを使う)
