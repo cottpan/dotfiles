@@ -35,3 +35,10 @@ map("n", "<C-l>", "<C-w>l", { desc = "Go to right window" })
 -- バッファ移動 (旧 airline tabline の代替操作)
 map("n", "[b", "<Cmd>bprevious<CR>", { desc = "Previous buffer" })
 map("n", "]b", "<Cmd>bnext<CR>", { desc = "Next buffer" })
+
+-- クリップボード (options.lua の clipboard = "unnamedplus" と対で使う)
+--
+-- 選択して p で上書きすると、消えた側がクリップボードに入って「同じものを 2 回貼る」が
+-- できなくなる。普通のエディタ (VSCode で選択して Cmd+V) はクリップボードを保つので、
+-- 消える側をブラックホールに捨てて挙動を合わせる。
+map("x", "p", '"_dP', { desc = "Paste without clobbering the clipboard" })
