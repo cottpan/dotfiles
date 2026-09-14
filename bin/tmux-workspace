@@ -86,8 +86,8 @@ fi
 if [ "$no_agent" -eq 1 ]; then
     agent=""
 fi
-agent_percent=$(option @workspace-agent-percent "30")
-terminal_percent=$(option @workspace-terminal-percent "20")
+agent_percent=$(option @workspace-agent-percent "33")
+terminal_percent=$(option @workspace-terminal-percent "25")
 
 [ -n "$name" ] || name=$(basename "$dir")
 

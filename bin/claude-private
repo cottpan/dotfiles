@@ -1,0 +1,36 @@
+#!/usr/bin/env zsh
+#
+# claude-private - 別アカウント用の Claude Code を起動する
+#
+# 通常の `claude` は何も変えず ~/.claude を使う。こちらは CLAUDE_CONFIG_DIR を
+# 差し替えて起動するので、以下がまるごと別系統になる。
+#
+#   - 設定           $CONFIG_DIR/settings.json, $CONFIG_DIR/.claude.json
+#   - グローバル memory  $CONFIG_DIR/CLAUDE.md（無ければ読まれないだけ）
+#   - セッション履歴   $CONFIG_DIR/{projects,sessions,history.jsonl,todos,...}
+#   - 認証情報        macOS keychain の別項目
+#
+# keychain の項目名は "Claude Code-credentials-<sha256(CLAUDE_CONFIG_DIR) の先頭 8 桁>"
+# として作られる（CLAUDE_CONFIG_DIR 未設定時だけ suffix なし）ので、
+# ここでログインしても素の `claude` 側のログインは影響を受けない。
+#
+# 共有されるもの: 実行バイナリ（~/.local/share/claude/versions）と、
+# リポジトリ側の project memory（CLAUDE.md / .claude/）。cwd で決まるため。
+#
+# 置き場所は CLAUDE_PRIVATE_CONFIG_DIR で上書きできる（絶対パス必須）。
+#
+# Usage:
+#   claude-private [claude と同じ引数]
+#
+set -e
+
+CONFIG_DIR="${CLAUDE_PRIVATE_CONFIG_DIR:-$HOME/.claude-private}"
+
+if [[ "$CONFIG_DIR" != /* ]]; then
+  print -u2 "❌ CLAUDE_CONFIG_DIR は絶対パスが必要: $CONFIG_DIR"
+  exit 1
+fi
+
+[ -d "$CONFIG_DIR" ] || mkdir -p -m 700 "$CONFIG_DIR"
+
+exec env CLAUDE_CONFIG_DIR="$CONFIG_DIR" claude "$@"
