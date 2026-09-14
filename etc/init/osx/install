@@ -44,6 +44,13 @@ else
 fi
 
 cp "${DOTPATH}/Brewfile.test" "$HOME/.Brewfile"
+
+# GitHub Actions の macos-latest ランナーには bazelisk がプリインストールされており、
+# これが Brewfile (test) の bazel と競合して `brew bundle` が失敗する
+# (bazel: Cannot install bazel because conflicting formulae are installed.)。
+# bazelisk が入っていない環境では何もしないので無条件に呼んでよい
+"${HOMEBREW_BIN_PATH}/brew" unlink bazelisk > /dev/null 2>&1 || true
+
 "${HOMEBREW_BIN_PATH}/brew" bundle --global --verbose
 
 mkdir -p "$HOME/.config/git"
