@@ -9,6 +9,7 @@ jnv = "latest"
 lazydocker = "latest"
 # ファイラ。画像プレビューは Ghostty でそのまま出る
 yazi = "latest"
+node = "24.16.0"
 
 [settings]
 trusted_config_paths = ["~/src/dc"]
