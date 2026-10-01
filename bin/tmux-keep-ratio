@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+# ウィンドウサイズが変わったときに、分割済みペインの比率を保ったままリサイズする。
+# .tmux.conf の hook から呼ばれる。
+#
+#   tmux-keep-ratio save   <window_id> [--auto]  今のレイアウトを基準として覚える
+#   tmux-keep-ratio resize <window_id>           基準レイアウトを今のサイズに拡縮して当て直す
+#
+# tmux 自身はウィンドウの増減分を子ペインに 1 セルずつ順番に配るので、
+# 30:70 の分割を半分に縮めると 10:90 のように比率が崩れる。
+# そこで「ユーザーが最後に作ったレイアウト」を window option (@keep_ratio_ref) に覚えておき、
+# リサイズのたびにそれを新しいサイズへ比例配分して select-layout で当て直す。
+# 基準は常にユーザーが作ったものから拡縮するので、何度リサイズしても丸め誤差は溜まらない。
+#
+# --auto は window-layout-changed から呼ぶとき用。このフックはリサイズでも発火するので、
+# ペインの構成 (増減) が変わったときだけ保存する。分割比の変更は after-resize-pane などの
+# コマンドフック側 (--auto なし) で拾う。
+
+import re
+import subprocess
+import sys
+
+REF = "@keep_ratio_ref"
+BUSY = "@keep_ratio_busy"
+
+
+def tmux(*args):
+    return subprocess.run(["tmux", *args], capture_output=True, text=True).stdout.rstrip("\n")
+
+
+def checksum(body):
+    csum = 0
+    for ch in body:
+        csum = (csum >> 1) + ((csum & 1) << 15)
+        csum = (csum + ord(ch)) & 0xFFFF
+    return "%04x" % csum
+
+
+# レイアウト文字列: "csum,WxH,X,Y{...}" / "[...]" / ",<pane_id>"
+# ノードは (w, h, kind, children_or_pane_id)。kind は "{" (左右) / "[" (上下) / "pane"
+def parse(body):
+    pos = 0
+
+    def node():
+        nonlocal pos
+        m = re.compile(r"(\d+)x(\d+),(\d+),(\d+)").match(body, pos)
+        w, h = int(m.group(1)), int(m.group(2))
+        pos = m.end()
+        if pos < len(body) and body[pos] in "{[":
+            kind = body[pos]
+            close = "}" if kind == "{" else "]"
+            pos += 1
+            children = [node()]
+            while body[pos] == ",":
+                pos += 1
+                children.append(node())
+            assert body[pos] == close
+            pos += 1
+            return (w, h, kind, children)
+        m = re.compile(r",(\d+)").match(body, pos)
+        pos = m.end()
+        return (w, h, "pane", int(m.group(1)))
+
+    return node()
+
+
+def pane_ids(n):
+    if n[2] == "pane":
+        return [n[3]]
+    return [i for c in n[3] for i in pane_ids(c)]
+
+
+def split(old_sizes, new_total):
+    # 枠線 1 セルぶんを除いた領域を、元の比率で配る。各ペインは最低 1 セル
+    count = len(old_sizes)
+    old_avail = sum(old_sizes)
+    new_avail = new_total - (count - 1)
+    sizes = []
+    used = 0
+    acc = 0
+    for i, s in enumerate(old_sizes):
+        acc += s
+        # 累積で丸めると、合計が必ず new_avail に一致する
+        end = round(acc * new_avail / old_avail) if i < count - 1 else new_avail
+        size = max(1, end - used)
+        sizes.append(size)
+        used += size
+    # 最低 1 セルの補正で溢れたら、大きいものから削る
+    while used > new_avail:
+        i = sizes.index(max(sizes))
+        if sizes[i] <= 1:
+            break
+        sizes[i] -= 1
+        used -= 1
+    return sizes
+
+
+def render(n, w, h, x, y):
+    head = "%dx%d,%d,%d" % (w, h, x, y)
+    if n[2] == "pane":
+        return head + ",%d" % n[3]
+    children = n[3]
+    if n[2] == "{":
+        sizes = split([c[0] for c in children], w)
+    else:
+        sizes = split([c[1] for c in children], h)
+    parts = []
+    offset = x if n[2] == "{" else y
+    for c, s in zip(children, sizes):
+        if n[2] == "{":
+            parts.append(render(c, s, h, offset, y))
+        else:
+            parts.append(render(c, w, s, x, offset))
+        offset += s + 1
+    close = "}" if n[2] == "{" else "]"
+    return head + n[2] + ",".join(parts) + close
+
+
+def window_info(win):
+    out = tmux("display-message", "-p", "-t", win,
+               "#{window_layout}\t#{window_width}\t#{window_height}\t#{window_zoomed_flag}\t#{window_panes}")
+    if not out:
+        return None
+    layout, w, h, zoomed, panes = out.split("\t")
+    return layout, int(w), int(h), zoomed == "1", int(panes)
+
+
+def get_ref(win):
+    return tmux("show-options", "-wqv", "-t", win, REF)
+
+
+def save(win, auto):
+    if tmux("show-options", "-wqv", "-t", win, BUSY) == "1":
+        return
+    info = window_info(win)
+    if info is None:
+        return
+    layout, _, _, zoomed, panes = info
+    if zoomed or panes < 2:
+        return
+    if auto:
+        ref = get_ref(win)
+        if ref and sorted(pane_ids(parse(ref.split(",", 1)[1]))) == sorted(pane_ids(parse(layout.split(",", 1)[1]))):
+            return
+    tmux("set-option", "-wq", "-t", win, REF, layout)
+
+
+def resize(win):
+    info = window_info(win)
+    if info is None:
+        return
+    layout, w, h, zoomed, panes = info
+    if zoomed or panes < 2:
+        return
+    ref = get_ref(win)
+    current = parse(layout.split(",", 1)[1])
+    if not ref:
+        return
+    base = parse(ref.split(",", 1)[1])
+    if sorted(pane_ids(base)) != sorted(pane_ids(current)):
+        # 基準が古い (フックを取りこぼした) ので今のものを基準にし直す
+        tmux("set-option", "-wq", "-t", win, REF, layout)
+        return
+    body = render(base, w, h, 0, 0)
+    if body == layout.split(",", 1)[1]:
+        return
+    # select-layout は after-select-layout フックを同期的に呼ぶので、
+    # 自分の当て直しを基準として保存しないように印を付けておく
+    tmux("set-option", "-wq", "-t", win, BUSY, "1", ";",
+         "select-layout", "-t", win, checksum(body) + "," + body, ";",
+         "set-option", "-wqu", "-t", win, BUSY)
+
+
+def main():
+    if len(sys.argv) < 3:
+        sys.exit("usage: tmux-keep-ratio save|resize <window_id> [--auto]")
+    cmd, win = sys.argv[1], sys.argv[2]
+    try:
+        if cmd == "save":
+            save(win, "--auto" in sys.argv[3:])
+        elif cmd == "resize":
+            resize(win)
+    except Exception:
+        # フックから呼ばれるので、解析できないレイアウトでも tmux の操作は止めない
+        pass
+
+
+if __name__ == "__main__":
+    main()
