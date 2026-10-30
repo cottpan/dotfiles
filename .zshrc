@@ -126,7 +126,18 @@ if [ -n "$ZPLUG_HOME" ] && command -v zplug > /dev/null 2>&1; then
   fi
 
   # コマンドをリンクして、PATH に追加し、プラグインは読み込む
-  zplug load
+  # zplug load は毎回 cache/interface を >| で書き直し、差分があると cache を rm→再生成する。
+  # 複数の zsh が同時に起動すると（secretaryd の Terminal・エージェントのシェル初期化など）
+  # 空の plugin.zsh を読んで zsh-async が欠け、pure が async_job not found を出すので直列化する
+  zmodload zsh/system
+  : >>| "$ZPLUG_HOME/cache/.load.lock" 2>/dev/null
+  if zsystem flock -t 10 -f _zplug_lock_fd "$ZPLUG_HOME/cache/.load.lock" 2>/dev/null; then
+    zplug load
+    exec {_zplug_lock_fd}>&-
+    unset _zplug_lock_fd
+  else
+    zplug load
+  fi
 fi
 
 eval "$(mise activate zsh)"
