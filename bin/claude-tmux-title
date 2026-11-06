@@ -71,8 +71,13 @@ def sanitize(text):
 
 
 def clean(title):
-    """モデルの返答から余計なものを落とす。"""
-    title = title.strip().splitlines()[0] if title.strip() else ""
+    """モデルの返答から余計なものを落とす。
+
+    前置き（「〜に従います」など）が付くことがあるので、最後の空でない行を採る。
+    """
+    lines = [line.strip() for line in title.strip().splitlines() if line.strip()]
+    title = lines[-1] if lines else ""
+    title = title.replace("**", "").lstrip("#-* ")
     return title.strip().strip("\"'「」『』 　").rstrip("。.")
 
 
@@ -86,7 +91,12 @@ def worker(pane, cwd):
     env = dict(os.environ, CLAUDE_TMUX_TITLE_SKIP="1")
     try:
         proc = subprocess.run(
-            ["claude", "-p", "--model", MODEL, INSTRUCTION + prompt],
+            # --tools "" で全ツールを無効にする。この claude にも UserPromptSubmit の
+            # 進捗ログ指示と global CLAUDE.md が届くため、ツールがあると要約のたびに
+            # kb/mysession へ「タイトル生成」のログを 1 本ずつ書いてしまう。
+            # --tools は可変長で後ろの引数を飲み込むので、プロンプトは stdin で渡す。
+            ["claude", "-p", "--model", MODEL, "--tools", ""],
+            input=INSTRUCTION + prompt,
             capture_output=True,
             text=True,
             timeout=90,
