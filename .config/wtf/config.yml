@@ -177,7 +177,7 @@ wtf:
       type: cmdrunner
       title: " Claude Code "
       enabled: true
-      # ステータスバーと同じ ~/.claude/runcat-usage.json を読んでバーにする
+      # ステータスバーと同じ ~/.claude/usage-limits.json（bin/claude-statusline が書く）を読んでバーにする
       cmd: "~/bin/tmux-status-right"
       args: ["--panel", "claude"]
       refreshInterval: 60s

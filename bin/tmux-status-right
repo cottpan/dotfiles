@@ -33,9 +33,12 @@ CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "tm
 CACHE_FILE = CACHE_DIR / "right"
 PIDFILE = Path(os.environ.get("TMPDIR", "/tmp")) / f"tmux-status-right.{os.getuid()}.pid"
 
-RUNCAT_USAGE = Path.home() / ".claude" / "runcat-usage.json"
-# この時間より古い runcat-usage.json は「Claude Code を使っていない」とみなして薄く出す
-RUNCAT_STALE_SEC = 60 * 60
+# bin/claude-statusline が statusLine の rate_limits をそのまま書く JSON
+USAGE_LIMITS = Path.home() / ".claude" / "usage-limits.json"
+# この時間より古い usage-limits.json は「Claude Code を使っていない」とみなして薄く出す
+USAGE_STALE_SEC = 60 * 60
+# rate_limits のキー → 表示名（この順に出す）
+USAGE_WINDOWS = [("five_hour", "5h"), ("seven_day", "1w")]
 
 # 更新間隔 (秒)
 INTERVALS = {"calendar": 60, "github": 60, "claude": 20, "battery": 30, "network": 30}
@@ -238,42 +241,67 @@ def segment_github(icons):
     return f"{icons['github']} {count}", "github"
 
 
-def segment_claude(icons):
-    """Claude Code のレート制限使用率 (runcat-statusline.py が書く JSON)。"""
+def _until(seconds):
+    """リセットまでの秒数を 2h14m / 6d16h の形にする。"""
+    seconds = max(0, int(seconds))
+    days, rem = divmod(seconds, 86400)
+    hours, rem = divmod(rem, 3600)
+    if days:
+        return f"{days}d{hours}h"
+    if hours:
+        return f"{hours}h{rem // 60}m"
+    return f"{rem // 60}m"
+
+
+def claude_limits():
+    """usage-limits.json を読み、([(表示名, 使用率%, リセットまでの文字列 or None)], 更新時刻 or None) を返す。
+
+    リセットの時刻を過ぎた枠は、次の値が届くまで 0% として出す。読めなければ None。
+    """
     try:
-        data = json.loads(RUNCAT_USAGE.read_text(encoding="utf-8"))
+        data = json.loads(USAGE_LIMITS.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
+    limits = data.get("rateLimits") or {}
+    now = time.time()
+    rows = []
+    for key, label in USAGE_WINDOWS:
+        window = limits.get(key)
+        if not isinstance(window, dict) or window.get("used_percentage") is None:
+            continue
+        used = float(window["used_percentage"])
+        resets_at = window.get("resets_at")
+        reset = None
+        if isinstance(resets_at, (int, float)):
+            if resets_at <= now:
+                used = 0.0
+            else:
+                reset = _until(resets_at - now)
+        rows.append((label, used, reset))
+    updated = None
+    try:
+        updated = datetime.strptime(data.get("updatedAt") or "", "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        pass
+    return rows, updated
 
-    metrics = data.get("metrics") or []
-    if not metrics:
+
+def segment_claude(icons):
+    """Claude Code のレート制限使用率 (bin/claude-statusline が書く JSON)。"""
+    got = claude_limits()
+    if not got or not got[0]:
         return None
+    rows, updated = got
 
     # 5h:12%(2h54m) 1w:26% の形にする。リセットまでの時間は最初の枠だけ出す
-    parts = []
-    for index, metric in enumerate(metrics):
-        title = metric.get("title")
-        percent, _, reset = str(metric.get("formattedValue", "")).partition(" · ")
-        if not title or not percent:
-            continue
-        parts.append(f"{title}:{percent}({reset})" if reset and index == 0 else f"{title}:{percent}")
-    if not parts:
-        return None
-
-    value = " ".join(parts)
+    parts = [
+        f"{label}:{used:g}%({reset})" if reset and index == 0 else f"{label}:{used:g}%"
+        for index, (label, used, reset) in enumerate(rows)
+    ]
     style = "claude"
-    updated = data.get("lastUpdatedDate")
-    if updated:
-        try:
-            age = time.time() - datetime.strptime(updated, "%Y-%m-%dT%H:%M:%SZ").timestamp()
-            # lastUpdatedDate は UTC なので、ローカル時刻との差を補正する
-            age -= datetime.now().astimezone().utcoffset().total_seconds()
-            if age > RUNCAT_STALE_SEC:
-                style = "claude_stale"
-        except (ValueError, TypeError):
-            pass
-
-    return f"{icons['claude']} {value}", style
+    if updated and (datetime.now(timezone.utc) - updated).total_seconds() > USAGE_STALE_SEC:
+        style = "claude_stale"
+    return f"{icons['claude']} {' '.join(parts)}", style
 
 
 def _battery_macos():
@@ -432,36 +460,25 @@ def bar(ratio):
 
 def panel_claude():
     """Claude Code のレート制限を枠ごとにバーで出す。"""
-    try:
-        data = json.loads(RUNCAT_USAGE.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    got = claude_limits()
+    if not got or not got[0]:
         print("使用量がまだ取れていません")
         return 0
+    rows, updated = got
 
     lines = []
-    for metric in data.get("metrics") or []:
-        title = metric.get("title") or "-"
-        percent, _, reset = str(metric.get("formattedValue", "")).partition(" · ")
-        lines.append(f"{title:<3} {bar(metric.get('normalizedValue'))} {percent:>4}")
+    for label, used, reset in rows:
+        lines.append(f"{label:<3} {bar(used / 100)} {used:>3g}%")
         if reset:
             # 幅の狭いパネルなので、リセットまでの時間は次の行に落とす
             lines.append(f"    あと {reset}")
-    if not lines:
-        print("使用量がまだ取れていません")
-        return 0
 
-    updated = data.get("lastUpdatedDate")
     if updated:
-        try:
-            # lastUpdatedDate は UTC
-            when = datetime.strptime(updated, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-            local = when.astimezone()
-            age = datetime.now().astimezone() - local
-            mark = " (古い)" if age.total_seconds() > RUNCAT_STALE_SEC else ""
-            lines.append("")
-            lines.append(f"更新 {local:%H:%M} ({humanize(age)} 前){mark}")
-        except (ValueError, TypeError):
-            pass
+        local = updated.astimezone()
+        age = datetime.now().astimezone() - local
+        mark = " (古い)" if age.total_seconds() > USAGE_STALE_SEC else ""
+        lines.append("")
+        lines.append(f"更新 {local:%H:%M} ({humanize(age)} 前){mark}")
 
     print("\n".join(lines))
     return 0
