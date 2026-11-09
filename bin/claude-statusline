@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""
+Claude Code の statusLine。
+
+1. stdout — ステータスライン: モデル · effort · ctx% · 5h 使用率(リセットまで) · 1w 使用率(リセットまで)
+
+       Opus 5.5 · high · ctx 67% · 5h 24% (reset 2h14m) · 1w 41% (reset 3d5h)
+
+2. ~/.claude/usage-limits.json — secretaryd（~/src/dock-portal）が読む残量のスナップショット。
+   stdin の rate_limits を丸めずにそのまま書く（resets_at は Unix 秒）:
+
+       {
+         "updatedAt": "2026-11-09T06:10:44Z",
+         "rateLimits": {
+           "five_hour": {"used_percentage": 23.5, "resets_at": 1738425600},
+           "seven_day": {"used_percentage": 41.2, "resets_at": 1738857600}
+         }
+       }
+
+   rate_limits は Pro/Max で最初の API 応答のあとにだけ入る。入っていない描画では
+   ファイルを上書きしない（空で潰すと secretaryd の残量が「—」になる）。
+   出力先は USAGE_LIMITS_FILE で変えられる。
+"""
+
+import json
+import os
+import sys
+import tempfile
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+OUT = Path(os.environ.get("USAGE_LIMITS_FILE", str(Path.home() / ".claude" / "usage-limits.json")))
+
+# rate_limits のキー → ステータスラインの短い名前（この順に出す）。知らない枠は後ろに足す
+LABELS = {"five_hour": "5h", "seven_day": "1w"}
+
+
+def humanize(seconds):
+    if seconds <= 0:
+        return "now"
+    days, rem = divmod(int(seconds), 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes = rem // 60
+    if days:
+        return f"{days}d{hours}h"
+    if hours:
+        return f"{hours}h{minutes}m"
+    return f"{minutes}m"
+
+
+def write_snapshot(rate_limits):
+    snapshot = {
+        "updatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "rateLimits": rate_limits,
+    }
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".usage-limits-", dir=str(OUT.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(snapshot, f, ensure_ascii=False)
+        os.replace(tmp, OUT)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
+try:
+    payload = json.load(sys.stdin)
+    if not isinstance(payload, dict):
+        payload = {}
+except Exception:
+    payload = {}
+
+rate_limits = payload.get("rate_limits")
+if isinstance(rate_limits, dict) and any(isinstance(v, dict) and v.get("used_percentage") is not None for v in rate_limits.values()):
+    write_snapshot(rate_limits)
+else:
+    rate_limits = {}
+
+now = int(time.time())
+keys = [k for k in LABELS if k in rate_limits] + [k for k in rate_limits if k not in LABELS]
+limit_parts = []
+for key in keys:
+    bucket = rate_limits.get(key)
+    if not isinstance(bucket, dict) or bucket.get("used_percentage") is None:
+        continue
+    label = LABELS.get(key, key.replace("_", " ").title())
+    part = f"{label} {bucket['used_percentage']:g}%"
+    resets_at = bucket.get("resets_at")
+    if isinstance(resets_at, (int, float)):
+        part += f" (reset {humanize(resets_at - now)})"
+    limit_parts.append(part)
+
+model = (payload.get("model") or {}).get("display_name")
+effort = (payload.get("effort") or {}).get("level")
+ctx = (payload.get("context_window") or {}).get("used_percentage")
+
+parts = []
+if model:
+    parts.append(model)
+if effort:
+    parts.append(effort)
+if ctx is not None:  # セッション直後・/compact 直後は null
+    parts.append(f"ctx {ctx:g}%")
+parts += limit_parts
+
+print(" · ".join(parts) if parts else "Claude Code")
