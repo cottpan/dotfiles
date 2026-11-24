@@ -9,11 +9,13 @@
 # Usage:
 #   fbr
 #
+# fzf-tmux は使わない。tmux の pane を分割して fzf を出すため、1 つの pane だけを
+# 中継する端末（secretaryd のブラウザ端末）では fzf が見えず、フォーカスだけ新しい pane に移る。
+# --height で今の pane の中に出せば、tmux / Ghostty 直 / secretaryd のどれでも同じに動く。
 fbr() {
   local branches branch
   branches=$(git branch --all | grep -v HEAD) &&
-  branch=$(echo "$branches" |
-    fzf-tmux -d $(( 2 + $(wc -l <<< "$branches") )) +m) &&
+  branch=$(echo "$branches" | fzf --height '~50%' --reverse +m) &&
   git checkout $(echo "$branch" | sed "s/.* //" | sed "s#remotes/[^/]*/##")
 }
 
